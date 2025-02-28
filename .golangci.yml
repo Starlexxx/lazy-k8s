@@ -1,0 +1,128 @@
+run:
+  # Timeout for running all linters
+  timeout: 5m
+  # Allow some issues with dependencies
+  build-tags:
+    - release
+
+# Linter configuration
+linters:
+  disable-all: true
+  enable:
+    # Essential linters
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Suggest code simplifications
+    - govet         # Reports suspicious constructs
+    - ineffassign   # Detects ineffective assignments
+    - staticcheck   # Go static analysis
+    - unused        # Check for unused constants, variables, functions and types
+    - gofmt         # Check if code formatted with gofmt
+    - goimports     # Check import grouping and formatting
+
+    # Code quality linters
+    - bodyclose     # Check for unclosed response bodies
+    - dupl          # Code clone detection
+    - goconst       # Find repeated strings that could be constants
+    - gocritic      # Collection of opinionated checks
+    - gocyclo       # Check for cyclomatic complexity
+    - gosec         # Security problems detection
+    - misspell      # Check spelling errors
+    - prealloc      # Slice/map preallocation suggestions
+    - revive        # Fast, extensible, configurable linter
+    - stylecheck    # Stylecheck is a replacement for golint
+    - unconvert     # Remove unnecessary type conversions
+    - unparam       # Find unused function parameters
+    - whitespace    # Check for leading/trailing whitespace
+
+linters-settings:
+  errcheck:
+    # Check for unchecked type assertions and bit operations
+    check-type-assertions: true
+    check-blank: true
+  
+  gocyclo:
+    # Maximum cyclomatic complexity
+    min-complexity: 15
+  
+  dupl:
+    # Threshold for code duplication detection
+    threshold: 100
+  
+  lll:
+    # Maximum line length
+    line-length: 120
+  
+  gocritic:
+    enabled-checks:
+      - appendCombine   # Suggests to combine append calls
+      - emptyFallthrough # Detects empty fallthrough statements
+      - rangeExprCopy   # Checks for expensive copies of range expressions
+  
+  goimports:
+    # Local prefixes for import grouping
+    local-prefixes: github.com/Starlexxx/lazy-k8s
+
+  staticcheck:
+    # https://staticcheck.io/docs/options#checks
+    checks: ["all"]
+    
+issues:
+  # Maximum issues per linter and same issues counts
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  
+  # Exclude rules for specific cases
+  exclude-rules:
+    # Exclude tests from certain checks
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - lll
+        
+    # Exclude UI files with tcell dependencies from type checking
+    - path: pkg/ui/
+      text: "undefined: tcell"
+      linters:
+        - typecheck
+        
+    # Skip external dependencies issues
+    - path: pkg/ui/
+      text: "could not import"
+      linters:
+        - goimports
+        - gosimple
+        - staticcheck
+
+    # Additional exclusions for UI files
+    - path: pkg/ui/
+      text: "undeclared name: tcell"
+      linters:
+        - govet
+        
+    # Exceptions for tview
+    - path: pkg/ui/
+      text: "tview"
+      linters:
+        - typecheck
+
+    # Problems with functions not defined during linting
+    - path: pkg/ui/
+      text: "no value of type"
+      linters: 
+        - typecheck
+        
+    # Problems with types from tview and tcell
+    - path: pkg/ui/
+      text: "unknown field"
+      linters:
+        - govet
+
+# Output settings
+output:
+  # Sort results by file name
+  sort-results: true
+  # Print lines with issues
+  print-issued-lines: true
+  # Print linter name in the output
+  print-linter-name: true 

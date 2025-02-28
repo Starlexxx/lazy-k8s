@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Adding explicit permissions for GitHub Actions
+permissions:
+  contents: write   # Permission to write to repository
+  pull-requests: write   # Permission to comment on PRs
+  issues: write    # Permission to update issues
+  checks: write    # Permission to create checks
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod tidy
+          # Ensure all dependencies are installed
+          go get -v ./...
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.54.1
+          args: --timeout=10m
+
+      - name: Run golangci-lint
+        run: golangci-lint run -v --timeout=10m ./...
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Check formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "The following files need to be formatted:"
+            gofmt -l .
+            exit 1
+          fi
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [lint, format]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod tidy
+
+      - name: Run tests with coverage
+        run: |
+          # Run tests only for pkg packages that have tests
+          go test ./pkg/... -coverprofile=coverage.out -covermode=atomic
+          # Show total coverage for debugging
+          echo "Total coverage for pkg packages:"
+          go tool cover -func=coverage.out | grep total | awk '{print $3}'
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.out
+          flags: unittests
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          go mod download
+          go mod tidy
+
+      - name: Build
+        run: go build -v -ldflags="-X 'main.version=dev' -X 'main.commit=${{ github.sha }}' -X 'main.date=$(date -u +%Y-%m-%d)'" ./cmd/lazy-k8s
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lazy-k8s-${{ matrix.os }}
+          path: |
+            lazy-k8s
+            lazy-k8s.exe
+          if-no-files-found: ignore 

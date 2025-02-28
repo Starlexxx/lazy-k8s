@@ -1,0 +1,18 @@
+# Default owners for everything in the repo
+* @Starlexxx
+
+# Owners for specific directories
+/cmd/ @Starlexxx
+/pkg/commands/ @Starlexxx
+/pkg/client/ @Starlexxx
+/pkg/ui/ @Starlexxx
+/pkg/utils/ @Starlexxx
+
+# Owners for configuration files
+*.yml @Starlexxx
+*.yaml @Starlexxx
+go.mod @Starlexxx
+go.sum @Starlexxx
+
+# Documentation
+*.md @Starlexxx 
