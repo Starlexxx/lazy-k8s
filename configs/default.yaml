@@ -1,0 +1,40 @@
+theme:
+  primaryColor: "#7aa2f7"
+  secondaryColor: "#9ece6a"
+  errorColor: "#f7768e"
+  warningColor: "#e0af68"
+  backgroundColor: "#1a1b26"
+  textColor: "#c0caf5"
+  borderColor: "#3b4261"
+
+keybindings:
+  quit: ["q", "ctrl+c"]
+  help: ["?"]
+  nextPanel: ["tab"]
+  prevPanel: ["shift+tab"]
+  up: ["k", "up"]
+  down: ["j", "down"]
+  search: ["/"]
+  delete: ["D"]
+  describe: ["d"]
+  yaml: ["y"]
+  logs: ["l"]
+  exec: ["x"]
+  portForward: ["p"]
+  scale: ["s"]
+  restart: ["r"]
+  refresh: ["ctrl+r"]
+
+defaults:
+  namespace: "default"
+  logLines: 100
+  followLogs: true
+  refreshInterval: 5
+
+panels:
+  visible:
+    - namespaces
+    - pods
+    - deployments
+    - services
+  layout: "vertical"

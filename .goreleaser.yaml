@@ -1,0 +1,74 @@
+project_name: lazy-k8s
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: lazy-k8s
+    main: ./cmd/lazy-k8s
+    binary: lazy-k8s
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: lazy-k8s
+    builds:
+      - lazy-k8s
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+
+brews:
+  - name: lazy-k8s
+    repository:
+      owner: lazyk8s
+      name: homebrew-tap
+    homepage: "https://github.com/lazyk8s/lazy-k8s"
+    description: "A terminal UI for Kubernetes management"
+    license: "MIT"
+    install: |
+      bin.install "lazy-k8s"
+    test: |
+      system "#{bin}/lazy-k8s", "--version"
+
+nfpms:
+  - id: lazy-k8s
+    package_name: lazy-k8s
+    homepage: "https://github.com/lazyk8s/lazy-k8s"
+    description: "A terminal UI for Kubernetes management"
+    maintainer: "lazy-k8s maintainers"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
