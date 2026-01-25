@@ -1,5 +1,11 @@
 # lazy-k8s
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/lazyk8s/lazy-k8s)](https://go.dev/)
+[![CI](https://github.com/lazyk8s/lazy-k8s/actions/workflows/pr.yml/badge.svg)](https://github.com/lazyk8s/lazy-k8s/actions/workflows/pr.yml)
+[![Release](https://github.com/lazyk8s/lazy-k8s/actions/workflows/release.yml/badge.svg)](https://github.com/lazyk8s/lazy-k8s/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/lazyk8s/lazy-k8s)](https://goreportcard.com/report/github.com/lazyk8s/lazy-k8s)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A terminal-based user interface for Kubernetes management, inspired by lazygit.
 
 ## Features
@@ -27,7 +33,7 @@ A terminal-based user interface for Kubernetes management, inspired by lazygit.
 ```bash
 git clone https://github.com/lazyk8s/lazy-k8s.git
 cd lazy-k8s
-make build
+task build
 ./bin/lazy-k8s
 ```
 
@@ -138,24 +144,37 @@ panels:
 
 ## Requirements
 
-- Go 1.23+
+- Go 1.25+
 - kubectl configured with cluster access
 - Terminal with 256 color support
+- [Task](https://taskfile.dev/) (optional, for development)
 
 ## Building
 
 ```bash
 # Build for current platform
-make build
+task build
 
 # Build for all platforms
-make build-all
+task build:all
+
+# Run the application
+task run
 
 # Run tests
-make test
+task test
+
+# Run tests with coverage
+task test:coverage
 
 # Run linter
-make lint
+task lint
+
+# Run all checks (fmt, vet, lint, test)
+task verify
+
+# Show all available tasks
+task --list
 ```
 
 ## License

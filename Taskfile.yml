@@ -1,0 +1,149 @@
+version: '3'
+
+vars:
+  BINARY_NAME: lazy-k8s
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  BUILD_TIME:
+    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+  LDFLAGS: -ldflags "-X main.version={{.VERSION}} -X main.buildTime={{.BUILD_TIME}}"
+  GOFLAGS: -trimpath
+
+tasks:
+  default:
+    desc: Build the application
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the application for current platform
+    cmds:
+      - echo "Building {{.BINARY_NAME}}..."
+      - go build {{.GOFLAGS}} {{.LDFLAGS}} -o bin/{{.BINARY_NAME}} ./cmd/lazy-k8s
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - bin/{{.BINARY_NAME}}
+
+  build:linux:
+    desc: Build for Linux (amd64)
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for Linux..."
+      - GOOS=linux GOARCH=amd64 go build {{.GOFLAGS}} {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-linux-amd64 ./cmd/lazy-k8s
+
+  build:darwin:
+    desc: Build for macOS (amd64 and arm64)
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for macOS..."
+      - GOOS=darwin GOARCH=amd64 go build {{.GOFLAGS}} {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-amd64 ./cmd/lazy-k8s
+      - GOOS=darwin GOARCH=arm64 go build {{.GOFLAGS}} {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-darwin-arm64 ./cmd/lazy-k8s
+
+  build:windows:
+    desc: Build for Windows (amd64)
+    cmds:
+      - echo "Building {{.BINARY_NAME}} for Windows..."
+      - GOOS=windows GOARCH=amd64 go build {{.GOFLAGS}} {{.LDFLAGS}} -o bin/{{.BINARY_NAME}}-windows-amd64.exe ./cmd/lazy-k8s
+
+  build:all:
+    desc: Build for all platforms
+    cmds:
+      - task: build:linux
+      - task: build:darwin
+      - task: build:windows
+
+  install:
+    desc: Install binary to GOPATH/bin
+    deps: [build]
+    cmds:
+      - echo "Installing {{.BINARY_NAME}}..."
+      - cp bin/{{.BINARY_NAME}} ${GOPATH}/bin/{{.BINARY_NAME}}
+
+  run:
+    desc: Run the application
+    cmds:
+      - echo "Running {{.BINARY_NAME}}..."
+      - go run ./cmd/lazy-k8s
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - echo "Cleaning..."
+      - rm -rf bin/
+      - rm -f coverage.out coverage.html
+
+  test:
+    desc: Run tests
+    cmds:
+      - echo "Running tests..."
+      - go test -v ./...
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - echo "Running tests with coverage..."
+      - go test -v -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+
+  test:race:
+    desc: Run tests with race detector
+    cmds:
+      - echo "Running tests with race detector..."
+      - go test -race -v ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - echo "Running linter..."
+      - golangci-lint run
+
+  lint:fix:
+    desc: Run golangci-lint with auto-fix
+    cmds:
+      - echo "Running linter with auto-fix..."
+      - golangci-lint run --fix
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - echo "Formatting code..."
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - echo "Running go vet..."
+      - go vet ./...
+
+  tidy:
+    desc: Tidy Go modules
+    cmds:
+      - echo "Tidying modules..."
+      - go mod tidy
+
+  deps:
+    desc: Download dependencies
+    cmds:
+      - echo "Downloading dependencies..."
+      - go mod download
+
+  verify:
+    desc: Run all checks (fmt, vet, lint, test)
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: lint
+      - task: test
+
+  release:
+    desc: Create a release with goreleaser
+    cmds:
+      - echo "Creating release..."
+      - goreleaser release --clean
+
+  snapshot:
+    desc: Create a snapshot release
+    cmds:
+      - echo "Creating snapshot release..."
+      - goreleaser release --snapshot --clean
