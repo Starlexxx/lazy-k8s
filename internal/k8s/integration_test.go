@@ -414,10 +414,3 @@ func TestIntegration_ScaleDeployment(t *testing.T) {
 	}
 	t.Logf("Scaled back to: %d replicas", originalReplicas)
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

@@ -27,6 +27,9 @@ const (
 	ViewNamespaceSwitch
 )
 
+// borderLines is the number of lines used by panel borders (top + bottom)
+const borderLines = 2
+
 type Model struct {
 	// Core dependencies
 	k8sClient *k8s.Client
@@ -420,9 +423,8 @@ func (m *Model) renderPanels(width, height int) string {
 	rightPanelWidth := width - leftPanelWidth - 1
 
 	// Left side: stacked resource lists
-	// Each panel has 2 lines of border overhead (top + bottom)
 	numPanels := len(m.panels)
-	borderOverhead := numPanels * 2
+	borderOverhead := numPanels * borderLines
 	availableHeight := height - borderOverhead
 	if availableHeight < numPanels {
 		availableHeight = numPanels
@@ -438,8 +440,8 @@ func (m *Model) renderPanels(width, height int) string {
 
 	leftView := lipgloss.JoinVertical(lipgloss.Left, leftPanels...)
 
-	// Right side: detail view (also has 2 lines border overhead)
-	detailHeight := height - 2
+	// Right side: detail view
+	detailHeight := height - borderLines
 	if detailHeight < 1 {
 		detailHeight = 1
 	}
