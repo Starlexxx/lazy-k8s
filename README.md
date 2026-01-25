@@ -138,7 +138,7 @@ panels:
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.23+
 - kubectl configured with cluster access
 - Terminal with 256 color support
 
