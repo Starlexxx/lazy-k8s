@@ -20,6 +20,7 @@ func (c *Client) ListNamespaces(ctx context.Context) ([]corev1.Namespace, error)
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
@@ -37,6 +38,7 @@ func (c *Client) CreateNamespace(ctx context.Context, name string) (*corev1.Name
 			Name: name,
 		},
 	}
+
 	return c.clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 }
 

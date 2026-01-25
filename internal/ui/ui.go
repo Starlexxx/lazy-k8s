@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/config"
 	"github.com/lazyk8s/lazy-k8s/internal/k8s"
 	"github.com/lazyk8s/lazy-k8s/internal/ui/components"
@@ -27,7 +28,7 @@ const (
 	ViewNamespaceSwitch
 )
 
-// borderLines is the number of lines used by panel borders (top + bottom)
+// borderLines is the number of lines used by panel borders (top + bottom).
 const borderLines = 2
 
 type Model struct {
@@ -42,7 +43,7 @@ type Model struct {
 	height int
 
 	// Panels
-	panels       []panels.Panel
+	panels         []panels.Panel
 	activePanelIdx int
 
 	// Components
@@ -55,12 +56,12 @@ type Model struct {
 	search    *components.Search
 
 	// State
-	viewMode      ViewMode
-	lastError     string
-	lastStatus    string
-	showAllNs     bool
-	searchActive  bool
-	searchQuery   string
+	viewMode     ViewMode
+	lastError    string
+	lastStatus   string
+	showAllNs    bool
+	searchActive bool
+	searchQuery  string
 
 	// Context/namespace switching
 	contextList   []string
@@ -152,47 +153,61 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.updatePanelSizes()
+
 		return m, nil
 
 	case tea.KeyMsg:
 		// Handle view-specific keys first
 		switch m.viewMode {
 		case ViewHelp:
-			if key.Matches(msg, m.keys.Back) || key.Matches(msg, m.keys.Help) || msg.String() == "q" {
+			if key.Matches(msg, m.keys.Back) || key.Matches(msg, m.keys.Help) ||
+				msg.String() == "q" {
 				m.viewMode = ViewNormal
+
 				return m, nil
 			}
+
 			return m, nil
 
 		case ViewYaml:
 			if key.Matches(msg, m.keys.Back) {
 				m.viewMode = ViewNormal
+
 				return m, nil
 			}
+
 			var cmd tea.Cmd
+
 			m.yamlView, cmd = m.yamlView.Update(msg)
+
 			return m, cmd
 
 		case ViewLogs:
 			if key.Matches(msg, m.keys.Back) {
 				m.viewMode = ViewNormal
 				m.logView.Stop()
+
 				return m, nil
 			}
+
 			var cmd tea.Cmd
+
 			m.logView, cmd = m.logView.Update(msg)
+
 			return m, cmd
 
 		case ViewConfirm:
 			var cmd tea.Cmd
+
 			m.confirm, cmd = m.confirm.Update(msg)
 			if m.confirm.Done() {
 				m.viewMode = ViewNormal
 				if m.confirm.Confirmed() {
 					// Execute the confirmed action
-					cmds = append(cmds, m.confirm.Action())
+					return m, m.confirm.Action()
 				}
 			}
+
 			return m, cmd
 
 		case ViewContextSwitch:
@@ -200,6 +215,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case ViewNamespaceSwitch:
 			return m.handleNamespaceSwitch(msg)
+
+		case ViewNormal, ViewInput:
+			// Fall through to normal key handling below
 		}
 
 		// Search mode
@@ -208,15 +226,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchActive = false
 				m.searchQuery = ""
 				m.search.Clear()
+
 				return m, nil
 			}
+
 			var cmd tea.Cmd
+
 			m.search, cmd = m.search.Update(msg)
 			m.searchQuery = m.search.Value()
 			// Apply filter to current panel
 			if len(m.panels) > m.activePanelIdx {
 				m.panels[m.activePanelIdx].SetFilter(m.searchQuery)
 			}
+
 			return m, cmd
 		}
 
@@ -227,19 +249,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Help):
 			m.viewMode = ViewHelp
+
 			return m, nil
 
 		case key.Matches(msg, m.keys.Search):
 			m.searchActive = true
 			m.search.Focus()
+
 			return m, nil
 
 		case key.Matches(msg, m.keys.NextPanel):
 			m.nextPanel()
+
 			return m, nil
 
 		case key.Matches(msg, m.keys.PrevPanel):
 			m.prevPanel()
+
 			return m, nil
 
 		case key.Matches(msg, m.keys.Context):
@@ -261,6 +287,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				panel.SetAllNamespaces(m.showAllNs)
 				cmds = append(cmds, panel.Refresh())
 			}
+
 			return m, tea.Batch(cmds...)
 
 		// Panel number shortcuts
@@ -301,13 +328,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.panels) > m.activePanelIdx {
 				panel, cmd := m.panels[m.activePanelIdx].Update(msg)
 				m.panels[m.activePanelIdx] = panel
+
 				return m, cmd
 			}
 		}
 
 	case components.LogLineMsg:
 		var cmd tea.Cmd
+
 		m.logView, cmd = m.logView.Update(msg)
+
 		return m, cmd
 
 	case panels.RefreshMsg:
@@ -316,19 +346,23 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if panel.Title() == msg.PanelName {
 				newPanel, cmd := panel.Update(msg)
 				m.panels[i] = newPanel
+
 				cmds = append(cmds, cmd)
 			}
 		}
+
 		return m, tea.Batch(cmds...)
 
 	case panels.ErrorMsg:
 		m.lastError = msg.Error.Error()
 		m.statusBar.SetError(m.lastError)
+
 		return m, nil
 
 	case panels.StatusMsg:
 		m.lastStatus = msg.Message
 		m.statusBar.SetMessage(m.lastStatus)
+
 		return m, nil
 	}
 
@@ -336,6 +370,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if len(m.panels) > m.activePanelIdx {
 		panel, cmd := m.panels[m.activePanelIdx].Update(msg)
 		m.panels[m.activePanelIdx] = panel
+
 		cmds = append(cmds, cmd)
 	}
 
@@ -363,7 +398,7 @@ func (m *Model) View() string {
 		content = m.overlayView(content, confirmView)
 	case ViewContextSwitch, ViewNamespaceSwitch:
 		content = m.renderSwitchView()
-	default:
+	case ViewNormal, ViewInput:
 		content = m.renderNormalView()
 	}
 
@@ -387,12 +422,11 @@ func (m *Model) renderNormalView() string {
 	}
 
 	// Search bar if active
-	searchHeight := 0
 	var searchView string
+
 	if m.searchActive {
-		searchHeight = 1
 		searchView = m.search.View(m.width)
-		panelHeight -= searchHeight
+		panelHeight--
 	}
 
 	// Render panels
@@ -402,10 +436,12 @@ func (m *Model) renderNormalView() string {
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("\n")
+
 	if m.searchActive {
 		b.WriteString(searchView)
 		b.WriteString("\n")
 	}
+
 	b.WriteString(panelsView)
 	b.WriteString("\n")
 	b.WriteString(statusBar)
@@ -425,13 +461,16 @@ func (m *Model) renderPanels(width, height int) string {
 	// Left side: stacked resource lists
 	numPanels := len(m.panels)
 	borderOverhead := numPanels * borderLines
+
 	availableHeight := height - borderOverhead
 	if availableHeight < numPanels {
 		availableHeight = numPanels
 	}
+
 	panelHeight := availableHeight / numPanels
 
 	var leftPanels []string
+
 	for i, panel := range m.panels {
 		panel.SetSize(leftPanelWidth, panelHeight)
 		panel.SetFocused(i == m.activePanelIdx)
@@ -445,6 +484,7 @@ func (m *Model) renderPanels(width, height int) string {
 	if detailHeight < 1 {
 		detailHeight = 1
 	}
+
 	rightView := m.renderDetailView(rightPanelWidth, detailHeight)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftView, rightView)
@@ -459,13 +499,16 @@ func (m *Model) renderDetailView(width, height int) string {
 	detail := activePanel.DetailView(width, height)
 
 	style := m.styles.Panel.Width(width).Height(height)
+
 	return style.Render(detail)
 }
 
 func (m *Model) renderSwitchView() string {
-	var title string
-	var items []string
-	var selectedIdx int
+	var (
+		title       string
+		items       []string
+		selectedIdx int
+	)
 
 	if m.viewMode == ViewContextSwitch {
 		title = "Switch Context"
@@ -487,6 +530,7 @@ func (m *Model) renderSwitchView() string {
 		} else {
 			b.WriteString(m.styles.ListItem.Render("  " + item))
 		}
+
 		b.WriteString("\n")
 	}
 
@@ -518,6 +562,7 @@ func (m *Model) nextPanel() {
 	if len(m.panels) == 0 {
 		return
 	}
+
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = (m.activePanelIdx + 1) % len(m.panels)
 	m.panels[m.activePanelIdx].SetFocused(true)
@@ -527,6 +572,7 @@ func (m *Model) prevPanel() {
 	if len(m.panels) == 0 {
 		return
 	}
+
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = (m.activePanelIdx - 1 + len(m.panels)) % len(m.panels)
 	m.panels[m.activePanelIdx].SetFocused(true)
@@ -536,6 +582,7 @@ func (m *Model) selectPanel(idx int) {
 	if idx < 0 || idx >= len(m.panels) {
 		return
 	}
+
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = idx
 	m.panels[m.activePanelIdx].SetFocused(true)
@@ -543,14 +590,18 @@ func (m *Model) selectPanel(idx int) {
 
 func (m *Model) startContextSwitch() (*Model, tea.Cmd) {
 	m.contextList = m.k8sClient.GetContexts()
+
 	m.selectIdx = 0
 	for i, ctx := range m.contextList {
 		if ctx == m.k8sClient.CurrentContext() {
 			m.selectIdx = i
+
 			break
 		}
 	}
+
 	m.viewMode = ViewContextSwitch
+
 	return m, nil
 }
 
@@ -559,6 +610,7 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 	nsList, err := m.k8sClient.ListNamespaces(m.k8sClient.Context())
 	if err != nil {
 		m.statusBar.SetError(fmt.Sprintf("Failed to list namespaces: %v", err))
+
 		return m, nil
 	}
 
@@ -571,10 +623,13 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 	for i, ns := range m.namespaceList {
 		if ns == m.k8sClient.CurrentNamespace() {
 			m.selectIdx = i
+
 			break
 		}
 	}
+
 	m.viewMode = ViewNamespaceSwitch
+
 	return m, nil
 }
 
@@ -602,14 +657,18 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 				for _, panel := range m.panels {
 					cmds = append(cmds, panel.Refresh())
 				}
+
 				m.viewMode = ViewNormal
+
 				return m, tea.Batch(cmds...)
 			}
 		}
+
 		m.viewMode = ViewNormal
 	case "esc":
 		m.viewMode = ViewNormal
 	}
+
 	return m, nil
 }
 
@@ -634,13 +693,17 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			for _, panel := range m.panels {
 				cmds = append(cmds, panel.Refresh())
 			}
+
 			m.viewMode = ViewNormal
+
 			return m, tea.Batch(cmds...)
 		}
+
 		m.viewMode = ViewNormal
 	case "esc":
 		m.viewMode = ViewNormal
 	}
+
 	return m, nil
 }
 
@@ -650,14 +713,17 @@ func (m *Model) showYaml() (*Model, tea.Cmd) {
 	}
 
 	activePanel := m.panels[m.activePanelIdx]
+
 	yaml, err := activePanel.GetSelectedYAML()
 	if err != nil {
 		m.statusBar.SetError(fmt.Sprintf("Failed to get YAML: %v", err))
+
 		return m, nil
 	}
 
 	m.yamlView.SetContent(yaml)
 	m.viewMode = ViewYaml
+
 	return m, nil
 }
 
@@ -667,9 +733,11 @@ func (m *Model) showLogs() (*Model, tea.Cmd) {
 	}
 
 	activePanel := m.panels[m.activePanelIdx]
+
 	podPanel, ok := activePanel.(*panels.PodsPanel)
 	if !ok {
 		m.statusBar.SetMessage("Logs only available for pods")
+
 		return m, nil
 	}
 
@@ -680,6 +748,7 @@ func (m *Model) showLogs() (*Model, tea.Cmd) {
 
 	m.viewMode = ViewLogs
 	cmd := m.logView.Start(m.k8sClient, pod.Namespace, pod.Name, "")
+
 	return m, cmd
 }
 
@@ -689,6 +758,7 @@ func (m *Model) confirmDelete() (*Model, tea.Cmd) {
 	}
 
 	activePanel := m.panels[m.activePanelIdx]
+
 	name := activePanel.SelectedName()
 	if name == "" {
 		return m, nil
@@ -702,6 +772,7 @@ func (m *Model) confirmDelete() (*Model, tea.Cmd) {
 		},
 	)
 	m.viewMode = ViewConfirm
+
 	return m, nil
 }
 
@@ -711,13 +782,16 @@ func (m *Model) showDescribe() (*Model, tea.Cmd) {
 	}
 
 	activePanel := m.panels[m.activePanelIdx]
+
 	describe, err := activePanel.GetSelectedDescribe()
 	if err != nil {
 		m.statusBar.SetError(fmt.Sprintf("Failed to describe: %v", err))
+
 		return m, nil
 	}
 
 	m.yamlView.SetContent(describe)
 	m.viewMode = ViewYaml
+
 	return m, nil
 }

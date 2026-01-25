@@ -55,6 +55,7 @@ func (p *ServicesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case servicesLoadedMsg:
 		p.services = msg.services
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -76,6 +77,7 @@ func (p *ServicesPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -127,6 +129,7 @@ func (p *ServicesPanel) renderServiceLine(svc corev1.Service, selected bool) str
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -151,11 +154,13 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 	b.WriteString("\n")
 
 	externalIP := k8s.GetServiceExternalIP(&svc)
+
 	b.WriteString(p.styles.DetailLabel.Render("External IP:"))
 	b.WriteString(p.styles.DetailValue.Render(externalIP))
 	b.WriteString("\n")
 
 	ports := k8s.GetServicePorts(&svc)
+
 	b.WriteString(p.styles.DetailLabel.Render("Ports:"))
 	b.WriteString(p.styles.DetailValue.Render(ports))
 	b.WriteString("\n")
@@ -175,6 +180,7 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Selector:"))
 		b.WriteString("\n")
+
 		for k, v := range svc.Spec.Selector {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -195,6 +201,7 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 			if name == "" {
 				name = "-"
 			}
+
 			row := fmt.Sprintf("  %-15s %-10d %-10s %-10s",
 				utils.Truncate(name, 15),
 				port.Port,
@@ -216,8 +223,11 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 func (p *ServicesPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var services []corev1.Service
-		var err error
+
+		var (
+			services []corev1.Service
+			err      error
+		)
 
 		if p.allNs {
 			services, err = p.client.ListServicesAllNamespaces(ctx)
@@ -228,6 +238,7 @@ func (p *ServicesPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return servicesLoadedMsg{services: services}
 	}
 }
@@ -238,12 +249,15 @@ func (p *ServicesPanel) Delete() tea.Cmd {
 	}
 
 	svc := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeleteService(ctx, svc.Namespace, svc.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted service: %s", svc.Name)}
 	}
 }
@@ -252,6 +266,7 @@ func (p *ServicesPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -259,6 +274,7 @@ func (p *ServicesPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -266,11 +282,14 @@ func (p *ServicesPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	svc := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(svc)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -278,6 +297,7 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	svc := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -289,6 +309,7 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 
 	if len(svc.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range svc.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -296,6 +317,7 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 
 	if len(svc.Spec.Selector) > 0 {
 		b.WriteString("\nSelector:\n")
+
 		for k, v := range svc.Spec.Selector {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -303,12 +325,22 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 
 	if len(svc.Spec.Ports) > 0 {
 		b.WriteString("\nPorts:\n")
+
 		for _, port := range svc.Spec.Ports {
 			name := port.Name
 			if name == "" {
 				name = "<unnamed>"
 			}
-			b.WriteString(fmt.Sprintf("  %s  %d/%s -> %s\n", name, port.Port, port.Protocol, port.TargetPort.String()))
+
+			b.WriteString(
+				fmt.Sprintf(
+					"  %s  %d/%s -> %s\n",
+					name,
+					port.Port,
+					port.Protocol,
+					port.TargetPort.String(),
+				),
+			)
 		}
 	}
 
@@ -318,6 +350,7 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 func (p *ServicesPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.services
+
 		return
 	}
 

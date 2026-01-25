@@ -54,6 +54,7 @@ func TestListPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
 	}
+
 	if len(pods) != 2 {
 		t.Errorf("ListPods returned %d pods, want 2", len(pods))
 	}
@@ -63,6 +64,7 @@ func TestListPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
 	}
+
 	if len(pods) != 1 {
 		t.Errorf("ListPods returned %d pods, want 1", len(pods))
 	}
@@ -72,6 +74,7 @@ func TestListPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
 	}
+
 	if len(pods) != 2 {
 		t.Errorf("ListPods with empty namespace returned %d pods, want 2", len(pods))
 	}
@@ -106,6 +109,7 @@ func TestListPodsAllNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPodsAllNamespaces returned unexpected error: %v", err)
 	}
+
 	if len(pods) != 3 {
 		t.Errorf("ListPodsAllNamespaces returned %d pods, want 3", len(pods))
 	}
@@ -134,9 +138,11 @@ func TestGetPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPod returned unexpected error: %v", err)
 	}
+
 	if pod.Name != "test-pod" {
 		t.Errorf("GetPod returned pod with name %q, want %q", pod.Name, "test-pod")
 	}
+
 	if len(pod.Spec.Containers) != 1 {
 		t.Errorf("GetPod returned pod with %d containers, want 1", len(pod.Spec.Containers))
 	}
@@ -152,6 +158,7 @@ func TestGetPod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPod with empty namespace returned unexpected error: %v", err)
 	}
+
 	if pod.Name != "test-pod" {
 		t.Errorf("GetPod returned pod with name %q, want %q", pod.Name, "test-pod")
 	}

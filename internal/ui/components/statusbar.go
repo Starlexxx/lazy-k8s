@@ -2,6 +2,7 @@ package components
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 

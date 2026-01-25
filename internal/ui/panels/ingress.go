@@ -56,6 +56,7 @@ func (p *IngressPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case ingressLoadedMsg:
 		p.ingresses = msg.ingresses
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -76,6 +77,7 @@ func (p *IngressPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -127,24 +129,29 @@ func (p *IngressPanel) renderIngressLine(ing networkingv1.Ingress, selected bool
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
 func (p *IngressPanel) getIngressHosts(ing *networkingv1.Ingress) string {
 	hosts := make([]string, 0)
+
 	for _, rule := range ing.Spec.Rules {
 		if rule.Host != "" {
 			hosts = append(hosts, rule.Host)
 		}
 	}
+
 	if len(hosts) == 0 {
 		return "*"
 	}
+
 	return strings.Join(hosts, ",")
 }
 
 func (p *IngressPanel) getIngressAddress(ing *networkingv1.Ingress) string {
 	addresses := make([]string, 0)
+
 	for _, lb := range ing.Status.LoadBalancer.Ingress {
 		if lb.IP != "" {
 			addresses = append(addresses, lb.IP)
@@ -152,9 +159,11 @@ func (p *IngressPanel) getIngressAddress(ing *networkingv1.Ingress) string {
 			addresses = append(addresses, lb.Hostname)
 		}
 	}
+
 	if len(addresses) == 0 {
 		return "<pending>"
 	}
+
 	return strings.Join(addresses, ",")
 }
 
@@ -204,6 +213,7 @@ func (p *IngressPanel) DetailView(width, height int) string {
 			if host == "" {
 				host = "*"
 			}
+
 			b.WriteString(fmt.Sprintf("  Host: %s\n", host))
 
 			if rule.HTTP != nil {
@@ -212,11 +222,17 @@ func (p *IngressPanel) DetailView(width, height int) string {
 					if pathStr == "" {
 						pathStr = "/"
 					}
+
 					pathType := "Prefix"
 					if path.PathType != nil {
 						pathType = string(*path.PathType)
 					}
-					backend := fmt.Sprintf("%s:%v", path.Backend.Service.Name, path.Backend.Service.Port.Number)
+
+					backend := fmt.Sprintf(
+						"%s:%v",
+						path.Backend.Service.Name,
+						path.Backend.Service.Port.Number,
+					)
 					b.WriteString(fmt.Sprintf("    %s (%s) -> %s\n", pathStr, pathType, backend))
 				}
 			}
@@ -244,18 +260,28 @@ func (p *IngressPanel) DetailView(width, height int) string {
 func (p *IngressPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var ingresses *networkingv1.IngressList
-		var err error
+
+		var (
+			ingresses *networkingv1.IngressList
+			err       error
+		)
 
 		if p.allNs {
-			ingresses, err = p.client.Clientset().NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{})
+			ingresses, err = p.client.Clientset().
+				NetworkingV1().
+				Ingresses("").
+				List(ctx, metav1.ListOptions{})
 		} else {
-			ingresses, err = p.client.Clientset().NetworkingV1().Ingresses(p.client.CurrentNamespace()).List(ctx, metav1.ListOptions{})
+			ingresses, err = p.client.Clientset().
+				NetworkingV1().
+				Ingresses(p.client.CurrentNamespace()).
+				List(ctx, metav1.ListOptions{})
 		}
 
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return ingressLoadedMsg{ingresses: ingresses.Items}
 	}
 }
@@ -266,12 +292,18 @@ func (p *IngressPanel) Delete() tea.Cmd {
 	}
 
 	ing := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := p.client.Clientset().NetworkingV1().Ingresses(ing.Namespace).Delete(ctx, ing.Name, metav1.DeleteOptions{})
+
+		err := p.client.Clientset().
+			NetworkingV1().
+			Ingresses(ing.Namespace).
+			Delete(ctx, ing.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted ingress: %s", ing.Name)}
 	}
 }
@@ -280,6 +312,7 @@ func (p *IngressPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -287,6 +320,7 @@ func (p *IngressPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -294,11 +328,14 @@ func (p *IngressPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	ing := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(ing)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -306,28 +343,35 @@ func (p *IngressPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	ing := p.filtered[p.cursor]
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Name:          %s\n", ing.Name))
 	b.WriteString(fmt.Sprintf("Namespace:     %s\n", ing.Namespace))
 	b.WriteString(fmt.Sprintf("Address:       %s\n", p.getIngressAddress(&ing)))
-	b.WriteString(fmt.Sprintf("Age:           %s\n", utils.FormatAgeFromMeta(ing.CreationTimestamp)))
+	b.WriteString(
+		fmt.Sprintf("Age:           %s\n", utils.FormatAgeFromMeta(ing.CreationTimestamp)),
+	)
 
 	if len(ing.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range ing.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
 	}
 
 	b.WriteString("\nRules:\n")
+
 	for _, rule := range ing.Spec.Rules {
 		host := rule.Host
 		if host == "" {
 			host = "*"
 		}
+
 		b.WriteString(fmt.Sprintf("  Host: %s\n", host))
+
 		if rule.HTTP != nil {
 			for _, path := range rule.HTTP.Paths {
 				b.WriteString(fmt.Sprintf("    Path: %s -> %s:%v\n",
@@ -344,6 +388,7 @@ func (p *IngressPanel) GetSelectedDescribe() (string, error) {
 func (p *IngressPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.ingresses
+
 		return
 	}
 

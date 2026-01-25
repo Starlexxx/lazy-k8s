@@ -95,6 +95,7 @@ func (c *Client) GetContexts() []string {
 	for name := range c.rawConfig.Contexts {
 		contexts = append(contexts, name)
 	}
+
 	return contexts
 }
 

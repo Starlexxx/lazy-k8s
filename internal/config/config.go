@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -8,23 +9,23 @@ import (
 )
 
 type Config struct {
-	Kubeconfig string
-	Context    string
-	Namespace  string
-	Theme      ThemeConfig      `mapstructure:"theme"`
+	Kubeconfig  string
+	Context     string
+	Namespace   string
+	Theme       ThemeConfig       `mapstructure:"theme"`
 	Keybindings KeybindingsConfig `mapstructure:"keybindings"`
-	Defaults   DefaultsConfig   `mapstructure:"defaults"`
-	Panels     PanelsConfig     `mapstructure:"panels"`
+	Defaults    DefaultsConfig    `mapstructure:"defaults"`
+	Panels      PanelsConfig      `mapstructure:"panels"`
 }
 
 type ThemeConfig struct {
-	PrimaryColor     string `mapstructure:"primaryColor"`
-	SecondaryColor   string `mapstructure:"secondaryColor"`
-	ErrorColor       string `mapstructure:"errorColor"`
-	WarningColor     string `mapstructure:"warningColor"`
-	BackgroundColor  string `mapstructure:"backgroundColor"`
-	TextColor        string `mapstructure:"textColor"`
-	BorderColor      string `mapstructure:"borderColor"`
+	PrimaryColor    string `mapstructure:"primaryColor"`
+	SecondaryColor  string `mapstructure:"secondaryColor"`
+	ErrorColor      string `mapstructure:"errorColor"`
+	WarningColor    string `mapstructure:"warningColor"`
+	BackgroundColor string `mapstructure:"backgroundColor"`
+	TextColor       string `mapstructure:"textColor"`
+	BorderColor     string `mapstructure:"borderColor"`
 }
 
 type KeybindingsConfig struct {
@@ -106,17 +107,22 @@ func Load() (*Config, error) {
 	if configDir, err := os.UserConfigDir(); err == nil {
 		viper.AddConfigPath(filepath.Join(configDir, "lazy-k8s"))
 	}
+
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		viper.AddConfigPath(filepath.Join(homeDir, ".config", "lazy-k8s"))
 		viper.AddConfigPath(filepath.Join(homeDir, ".lazy-k8s"))
 	}
+
 	viper.AddConfigPath(".")
 
 	// Read config file if it exists
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
+			// Only return error if it's NOT a "config file not found" error
 			return nil, err
 		}
+		// Config file not found is fine, use defaults
 	}
 
 	if err := viper.Unmarshal(cfg); err != nil {

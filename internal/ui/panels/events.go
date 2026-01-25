@@ -58,16 +58,20 @@ func (p *EventsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 		// Sort by last timestamp (most recent first)
 		sort.Slice(p.events, func(i, j int) bool {
 			ti := p.events[i].LastTimestamp.Time
+
 			tj := p.events[j].LastTimestamp.Time
 			if ti.IsZero() {
 				ti = p.events[i].EventTime.Time
 			}
+
 			if tj.IsZero() {
 				tj = p.events[j].EventTime.Time
 			}
+
 			return ti.After(tj)
 		})
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -88,6 +92,7 @@ func (p *EventsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -134,10 +139,11 @@ func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string 
 	line = utils.PadRight(line, p.width-10)
 
 	// Color based on event type
-	var typeStyle = p.styles.StatusRunning
+	typeStyle := p.styles.StatusRunning
 	if eventType == "Warning" {
 		typeStyle = p.styles.StatusWarning
 	}
+
 	line += " " + typeStyle.Render(utils.Truncate(eventType, 8))
 
 	if selected && p.focused {
@@ -145,6 +151,7 @@ func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string 
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -164,6 +171,7 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	if event.Type == "Warning" {
 		typeStyle = p.styles.StatusWarning
 	}
+
 	b.WriteString(p.styles.DetailLabel.Render("Type:"))
 	b.WriteString(typeStyle.Render(event.Type))
 	b.WriteString("\n")
@@ -174,7 +182,11 @@ func (p *EventsPanel) DetailView(width, height int) string {
 
 	// Object
 	b.WriteString(p.styles.DetailLabel.Render("Object:"))
-	b.WriteString(p.styles.DetailValue.Render(fmt.Sprintf("%s/%s", event.InvolvedObject.Kind, event.InvolvedObject.Name)))
+	b.WriteString(
+		p.styles.DetailValue.Render(
+			fmt.Sprintf("%s/%s", event.InvolvedObject.Kind, event.InvolvedObject.Name),
+		),
+	)
 	b.WriteString("\n")
 
 	// Timestamps
@@ -182,6 +194,7 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	if lastSeen.IsZero() {
 		lastSeen = event.EventTime.Time
 	}
+
 	b.WriteString(p.styles.DetailLabel.Render("Last Seen:"))
 	b.WriteString(p.styles.DetailValue.Render(utils.FormatAge(lastSeen)))
 	b.WriteString("\n")
@@ -206,10 +219,12 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	// Source
 	if event.Source.Component != "" {
 		b.WriteString(p.styles.DetailLabel.Render("Source:"))
+
 		source := event.Source.Component
 		if event.Source.Host != "" {
 			source += " on " + event.Source.Host
 		}
+
 		b.WriteString(p.styles.DetailValue.Render(source))
 		b.WriteString("\n")
 	}
@@ -231,8 +246,11 @@ func (p *EventsPanel) DetailView(width, height int) string {
 func (p *EventsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var events []corev1.Event
-		var err error
+
+		var (
+			events []corev1.Event
+			err    error
+		)
 
 		if p.allNs {
 			events, err = p.client.ListEventsAllNamespaces(ctx)
@@ -243,6 +261,7 @@ func (p *EventsPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return eventsLoadedMsg{events: events}
 	}
 }
@@ -257,6 +276,7 @@ func (p *EventsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -264,6 +284,7 @@ func (p *EventsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -271,11 +292,14 @@ func (p *EventsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	event := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(event)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -283,6 +307,7 @@ func (p *EventsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	event := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -290,14 +315,21 @@ func (p *EventsPanel) GetSelectedDescribe() (string, error) {
 	b.WriteString(fmt.Sprintf("Namespace:     %s\n", event.Namespace))
 	b.WriteString(fmt.Sprintf("Type:          %s\n", event.Type))
 	b.WriteString(fmt.Sprintf("Reason:        %s\n", event.Reason))
-	b.WriteString(fmt.Sprintf("Object:        %s/%s\n", event.InvolvedObject.Kind, event.InvolvedObject.Name))
+	b.WriteString(
+		fmt.Sprintf("Object:        %s/%s\n", event.InvolvedObject.Kind, event.InvolvedObject.Name),
+	)
 	b.WriteString(fmt.Sprintf("Count:         %d\n", event.Count))
 
 	if !event.FirstTimestamp.IsZero() {
-		b.WriteString(fmt.Sprintf("First Seen:    %s\n", utils.FormatTimestampFromMeta(event.FirstTimestamp)))
+		b.WriteString(
+			fmt.Sprintf("First Seen:    %s\n", utils.FormatTimestampFromMeta(event.FirstTimestamp)),
+		)
 	}
+
 	if !event.LastTimestamp.IsZero() {
-		b.WriteString(fmt.Sprintf("Last Seen:     %s\n", utils.FormatTimestampFromMeta(event.LastTimestamp)))
+		b.WriteString(
+			fmt.Sprintf("Last Seen:     %s\n", utils.FormatTimestampFromMeta(event.LastTimestamp)),
+		)
 	}
 
 	if event.Source.Component != "" {
@@ -312,10 +344,12 @@ func (p *EventsPanel) GetSelectedDescribe() (string, error) {
 func (p *EventsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.events
+
 		return
 	}
 
 	filter := strings.ToLower(p.filter)
+
 	p.filtered = make([]corev1.Event, 0)
 	for _, event := range p.events {
 		if strings.Contains(strings.ToLower(event.Reason), filter) ||

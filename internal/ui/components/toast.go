@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
@@ -18,11 +19,11 @@ const (
 )
 
 type Toast struct {
-	styles   *theme.Styles
-	message  string
+	styles    *theme.Styles
+	message   string
 	toastType ToastType
-	visible  bool
-	duration time.Duration
+	visible   bool
+	duration  time.Duration
 }
 
 type ToastHideMsg struct{}
@@ -53,6 +54,7 @@ func (t *Toast) Update(msg tea.Msg) (*Toast, tea.Cmd) {
 	case ToastHideMsg:
 		t.visible = false
 	}
+
 	return t, nil
 }
 
@@ -61,8 +63,10 @@ func (t *Toast) View(width int) string {
 		return ""
 	}
 
-	var style lipgloss.Style
-	var icon string
+	var (
+		style lipgloss.Style
+		icon  string
+	)
 
 	switch t.toastType {
 	case ToastSuccess:
@@ -83,7 +87,7 @@ func (t *Toast) View(width int) string {
 			Foreground(t.styles.Background).
 			Padding(0, 2)
 		icon = "✗ "
-	default:
+	case ToastInfo:
 		style = lipgloss.NewStyle().
 			Background(t.styles.Primary).
 			Foreground(t.styles.Background).

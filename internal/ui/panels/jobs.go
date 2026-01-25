@@ -56,6 +56,7 @@ func (p *JobsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case jobsLoadedMsg:
 		p.jobs = msg.jobs
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -76,6 +77,7 @@ func (p *JobsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -128,6 +130,7 @@ func (p *JobsPanel) renderJobLine(job batchv1.Job, selected bool) string {
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -135,12 +138,15 @@ func (p *JobsPanel) getJobStatus(job *batchv1.Job) string {
 	if job.Status.Succeeded > 0 {
 		return "Completed"
 	}
+
 	if job.Status.Failed > 0 {
 		return "Failed"
 	}
+
 	if job.Status.Active > 0 {
 		return "Running"
 	}
+
 	return "Pending"
 }
 
@@ -161,11 +167,15 @@ func (p *JobsPanel) DetailView(width, height int) string {
 	b.WriteString("\n")
 
 	b.WriteString(p.styles.DetailLabel.Render("Completions:"))
+
 	completions := int32(1)
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
-	b.WriteString(p.styles.DetailValue.Render(fmt.Sprintf("%d/%d", job.Status.Succeeded, completions)))
+
+	b.WriteString(
+		p.styles.DetailValue.Render(fmt.Sprintf("%d/%d", job.Status.Succeeded, completions)),
+	)
 	b.WriteString("\n")
 
 	b.WriteString(p.styles.DetailLabel.Render("Active:"))
@@ -189,13 +199,17 @@ func (p *JobsPanel) DetailView(width, height int) string {
 	// Timestamps
 	if job.Status.StartTime != nil {
 		b.WriteString(p.styles.DetailLabel.Render("Start Time:"))
-		b.WriteString(p.styles.DetailValue.Render(utils.FormatTimestampFromMeta(*job.Status.StartTime)))
+		b.WriteString(
+			p.styles.DetailValue.Render(utils.FormatTimestampFromMeta(*job.Status.StartTime)),
+		)
 		b.WriteString("\n")
 	}
 
 	if job.Status.CompletionTime != nil {
 		b.WriteString(p.styles.DetailLabel.Render("Completion:"))
-		b.WriteString(p.styles.DetailValue.Render(utils.FormatTimestampFromMeta(*job.Status.CompletionTime)))
+		b.WriteString(
+			p.styles.DetailValue.Render(utils.FormatTimestampFromMeta(*job.Status.CompletionTime)),
+		)
 		b.WriteString("\n")
 	}
 
@@ -208,18 +222,25 @@ func (p *JobsPanel) DetailView(width, height int) string {
 func (p *JobsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var jobs *batchv1.JobList
-		var err error
+
+		var (
+			jobs *batchv1.JobList
+			err  error
+		)
 
 		if p.allNs {
 			jobs, err = p.client.Clientset().BatchV1().Jobs("").List(ctx, metav1.ListOptions{})
 		} else {
-			jobs, err = p.client.Clientset().BatchV1().Jobs(p.client.CurrentNamespace()).List(ctx, metav1.ListOptions{})
+			jobs, err = p.client.Clientset().
+				BatchV1().
+				Jobs(p.client.CurrentNamespace()).
+				List(ctx, metav1.ListOptions{})
 		}
 
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return jobsLoadedMsg{jobs: jobs.Items}
 	}
 }
@@ -230,15 +251,21 @@ func (p *JobsPanel) Delete() tea.Cmd {
 	}
 
 	job := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
 		propagation := metav1.DeletePropagationBackground
-		err := p.client.Clientset().BatchV1().Jobs(job.Namespace).Delete(ctx, job.Name, metav1.DeleteOptions{
-			PropagationPolicy: &propagation,
-		})
+
+		err := p.client.Clientset().
+			BatchV1().
+			Jobs(job.Namespace).
+			Delete(ctx, job.Name, metav1.DeleteOptions{
+				PropagationPolicy: &propagation,
+			})
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted job: %s", job.Name)}
 	}
 }
@@ -247,6 +274,7 @@ func (p *JobsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -254,6 +282,7 @@ func (p *JobsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -261,11 +290,14 @@ func (p *JobsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	job := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(job)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -273,6 +305,7 @@ func (p *JobsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	job := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -284,12 +317,14 @@ func (p *JobsPanel) GetSelectedDescribe() (string, error) {
 	if job.Spec.Completions != nil {
 		completions = *job.Spec.Completions
 	}
+
 	b.WriteString(fmt.Sprintf("Completions:    %d/%d\n", job.Status.Succeeded, completions))
 	b.WriteString(fmt.Sprintf("Active:         %d\n", job.Status.Active))
 	b.WriteString(fmt.Sprintf("Failed:         %d\n", job.Status.Failed))
 
 	if len(job.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range job.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -301,6 +336,7 @@ func (p *JobsPanel) GetSelectedDescribe() (string, error) {
 func (p *JobsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.jobs
+
 		return
 	}
 

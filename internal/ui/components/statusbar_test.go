@@ -161,12 +161,14 @@ func TestStatusBarMessageOverridesError(t *testing.T) {
 
 	// Set an error first
 	statusBar.SetError("Error occurred")
+
 	if !statusBar.isError {
 		t.Error("isError should be true after SetError")
 	}
 
 	// Setting a message should clear the error flag
 	statusBar.SetMessage("Success")
+
 	if statusBar.isError {
 		t.Error("isError should be false after SetMessage")
 	}

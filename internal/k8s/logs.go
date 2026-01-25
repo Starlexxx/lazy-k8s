@@ -22,7 +22,11 @@ type LogLine struct {
 	Error   error
 }
 
-func (c *Client) StreamPodLogs(ctx context.Context, namespace, podName string, opts LogOptions) (<-chan LogLine, error) {
+func (c *Client) StreamPodLogs(
+	ctx context.Context,
+	namespace, podName string,
+	opts LogOptions,
+) (<-chan LogLine, error) {
 	if namespace == "" {
 		namespace = c.namespace
 	}
@@ -51,9 +55,10 @@ func (c *Client) StreamPodLogs(ctx context.Context, namespace, podName string, o
 
 	go func() {
 		defer close(logChan)
-		defer stream.Close()
+		defer func() { _ = stream.Close() }()
 
 		reader := bufio.NewReader(stream)
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -64,8 +69,10 @@ func (c *Client) StreamPodLogs(ctx context.Context, namespace, podName string, o
 					if err != io.EOF {
 						logChan <- LogLine{Error: err}
 					}
+
 					return
 				}
+
 				logChan <- LogLine{Content: line}
 			}
 		}
@@ -74,7 +81,11 @@ func (c *Client) StreamPodLogs(ctx context.Context, namespace, podName string, o
 	return logChan, nil
 }
 
-func (c *Client) GetPodLogSnapshot(ctx context.Context, namespace, podName string, opts LogOptions) (string, error) {
+func (c *Client) GetPodLogSnapshot(
+	ctx context.Context,
+	namespace, podName string,
+	opts LogOptions,
+) (string, error) {
 	if namespace == "" {
 		namespace = c.namespace
 	}

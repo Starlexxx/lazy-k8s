@@ -44,6 +44,7 @@ func TestListDeployments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
 	}
+
 	if len(deployments) != 2 {
 		t.Errorf("ListDeployments returned %d deployments, want 2", len(deployments))
 	}
@@ -53,6 +54,7 @@ func TestListDeployments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
 	}
+
 	if len(deployments) != 1 {
 		t.Errorf("ListDeployments returned %d deployments, want 1", len(deployments))
 	}
@@ -62,8 +64,12 @@ func TestListDeployments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
 	}
+
 	if len(deployments) != 2 {
-		t.Errorf("ListDeployments with empty namespace returned %d deployments, want 2", len(deployments))
+		t.Errorf(
+			"ListDeployments with empty namespace returned %d deployments, want 2",
+			len(deployments),
+		)
 	}
 }
 
@@ -96,6 +102,7 @@ func TestListDeploymentsAllNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDeploymentsAllNamespaces returned unexpected error: %v", err)
 	}
+
 	if len(deployments) != 3 {
 		t.Errorf("ListDeploymentsAllNamespaces returned %d deployments, want 3", len(deployments))
 	}
@@ -122,11 +129,20 @@ func TestGetDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDeployment returned unexpected error: %v", err)
 	}
+
 	if deployment.Name != "test-deployment" {
-		t.Errorf("GetDeployment returned deployment with name %q, want %q", deployment.Name, "test-deployment")
+		t.Errorf(
+			"GetDeployment returned deployment with name %q, want %q",
+			deployment.Name,
+			"test-deployment",
+		)
 	}
+
 	if *deployment.Spec.Replicas != 3 {
-		t.Errorf("GetDeployment returned deployment with %d replicas, want 3", *deployment.Spec.Replicas)
+		t.Errorf(
+			"GetDeployment returned deployment with %d replicas, want 3",
+			*deployment.Spec.Replicas,
+		)
 	}
 
 	// Test getting non-existent deployment
@@ -200,6 +216,7 @@ func TestUpdateDeployment(t *testing.T) {
 	if *updated.Spec.Replicas != 10 {
 		t.Errorf("Updated deployment has %d replicas, want 10", *updated.Spec.Replicas)
 	}
+
 	if updated.Labels["updated"] != "true" {
 		t.Errorf("Updated deployment should have label 'updated=true'")
 	}
@@ -342,9 +359,15 @@ func TestGetDeploymentImages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := GetDeploymentImages(tt.deployment)
 			if len(result) != len(tt.expected) {
-				t.Errorf("GetDeploymentImages() returned %d images, want %d", len(result), len(tt.expected))
+				t.Errorf(
+					"GetDeploymentImages() returned %d images, want %d",
+					len(result),
+					len(tt.expected),
+				)
+
 				return
 			}
+
 			for i, img := range result {
 				if img != tt.expected[i] {
 					t.Errorf("GetDeploymentImages()[%d] = %q, want %q", i, img, tt.expected[i])

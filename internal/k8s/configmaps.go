@@ -12,10 +12,12 @@ func (c *Client) ListConfigMaps(ctx context.Context, namespace string) ([]corev1
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	list, err := c.clientset.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
@@ -24,13 +26,18 @@ func (c *Client) ListConfigMapsAllNamespaces(ctx context.Context) ([]corev1.Conf
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
-func (c *Client) GetConfigMap(ctx context.Context, namespace, name string) (*corev1.ConfigMap, error) {
+func (c *Client) GetConfigMap(
+	ctx context.Context,
+	namespace, name string,
+) (*corev1.ConfigMap, error) {
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
@@ -38,6 +45,7 @@ func (c *Client) WatchConfigMaps(ctx context.Context, namespace string) (watch.I
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().ConfigMaps(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
@@ -45,13 +53,20 @@ func (c *Client) DeleteConfigMap(ctx context.Context, namespace, name string) er
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().ConfigMaps(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func (c *Client) UpdateConfigMap(ctx context.Context, cm *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+func (c *Client) UpdateConfigMap(
+	ctx context.Context,
+	cm *corev1.ConfigMap,
+) (*corev1.ConfigMap, error) {
 	return c.clientset.CoreV1().ConfigMaps(cm.Namespace).Update(ctx, cm, metav1.UpdateOptions{})
 }
 
-func (c *Client) CreateConfigMap(ctx context.Context, cm *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+func (c *Client) CreateConfigMap(
+	ctx context.Context,
+	cm *corev1.ConfigMap,
+) (*corev1.ConfigMap, error) {
 	return c.clientset.CoreV1().ConfigMaps(cm.Namespace).Create(ctx, cm, metav1.CreateOptions{})
 }

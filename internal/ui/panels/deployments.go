@@ -61,6 +61,7 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case deploymentsLoadedMsg:
 		p.deployments = msg.deployments
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -82,6 +83,7 @@ func (p *DeploymentsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	// Calculate visible items
@@ -129,10 +131,11 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 	line = utils.PadRight(line, p.width-10)
 
 	// Color based on ready state
-	var readyStyle = p.styles.StatusRunning
+	readyStyle := p.styles.StatusRunning
 	if deploy.Status.ReadyReplicas < *deploy.Spec.Replicas {
 		readyStyle = p.styles.StatusPending
 	}
+
 	line += " " + readyStyle.Render(ready)
 
 	if selected && p.focused {
@@ -140,6 +143,7 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -188,6 +192,7 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Images:"))
 		b.WriteString("\n")
+
 		for _, img := range images {
 			b.WriteString("  " + img + "\n")
 		}
@@ -198,11 +203,13 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Conditions:"))
 		b.WriteString("\n")
+
 		for _, cond := range deploy.Status.Conditions {
 			status := "False"
 			if cond.Status == "True" {
 				status = "True"
 			}
+
 			b.WriteString(fmt.Sprintf("  %s: %s\n", cond.Type, status))
 		}
 	}
@@ -217,8 +224,11 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 func (p *DeploymentsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var deployments []appsv1.Deployment
-		var err error
+
+		var (
+			deployments []appsv1.Deployment
+			err         error
+		)
 
 		if p.allNs {
 			deployments, err = p.client.ListDeploymentsAllNamespaces(ctx)
@@ -229,6 +239,7 @@ func (p *DeploymentsPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return deploymentsLoadedMsg{deployments: deployments}
 	}
 }
@@ -239,12 +250,15 @@ func (p *DeploymentsPanel) Delete() tea.Cmd {
 	}
 
 	deploy := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeleteDeployment(ctx, deploy.Namespace, deploy.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted deployment: %s", deploy.Name)}
 	}
 }
@@ -255,12 +269,15 @@ func (p *DeploymentsPanel) restartDeployment() tea.Cmd {
 	}
 
 	deploy := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.RestartDeployment(ctx, deploy.Namespace, deploy.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Restarted deployment: %s", deploy.Name)}
 	}
 }
@@ -269,6 +286,7 @@ func (p *DeploymentsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -276,6 +294,7 @@ func (p *DeploymentsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -283,11 +302,14 @@ func (p *DeploymentsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	deploy := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(deploy)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -295,37 +317,52 @@ func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	deploy := p.filtered[p.cursor]
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Name:               %s\n", deploy.Name))
 	b.WriteString(fmt.Sprintf("Namespace:          %s\n", deploy.Namespace))
-	b.WriteString(fmt.Sprintf("CreationTimestamp:  %s\n", utils.FormatTimestampFromMeta(deploy.CreationTimestamp)))
-	b.WriteString(fmt.Sprintf("Replicas:           %d desired | %d updated | %d total | %d available | %d unavailable\n",
-		*deploy.Spec.Replicas,
-		deploy.Status.UpdatedReplicas,
-		deploy.Status.Replicas,
-		deploy.Status.AvailableReplicas,
-		deploy.Status.UnavailableReplicas))
+	b.WriteString(
+		fmt.Sprintf(
+			"CreationTimestamp:  %s\n",
+			utils.FormatTimestampFromMeta(deploy.CreationTimestamp),
+		),
+	)
+	b.WriteString(
+		fmt.Sprintf(
+			"Replicas:           %d desired | %d updated | %d total | %d available | %d unavailable\n",
+			*deploy.Spec.Replicas,
+			deploy.Status.UpdatedReplicas,
+			deploy.Status.Replicas,
+			deploy.Status.AvailableReplicas,
+			deploy.Status.UnavailableReplicas,
+		),
+	)
 	b.WriteString(fmt.Sprintf("Strategy:           %s\n", deploy.Spec.Strategy.Type))
 
 	if len(deploy.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range deploy.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
 	}
 
 	b.WriteString("\nPod Template:\n")
+
 	for _, container := range deploy.Spec.Template.Spec.Containers {
 		b.WriteString(fmt.Sprintf("  Container: %s\n", container.Name))
 		b.WriteString(fmt.Sprintf("    Image:   %s\n", container.Image))
+
 		if len(container.Ports) > 0 {
 			b.WriteString("    Ports:   ")
+
 			var ports []string
 			for _, port := range container.Ports {
 				ports = append(ports, fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol))
 			}
+
 			b.WriteString(strings.Join(ports, ", "))
 			b.WriteString("\n")
 		}
@@ -333,6 +370,7 @@ func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
 
 	if len(deploy.Status.Conditions) > 0 {
 		b.WriteString("\nConditions:\n")
+
 		for _, cond := range deploy.Status.Conditions {
 			b.WriteString(fmt.Sprintf("  %s: %s (%s)\n", cond.Type, cond.Status, cond.Reason))
 		}
@@ -344,6 +382,7 @@ func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
 func (p *DeploymentsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.deployments
+
 		return
 	}
 

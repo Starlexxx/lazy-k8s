@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,6 +9,9 @@ import (
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 )
+
+// ErrPortForwarderNotStarted is returned when trying to get ports before starting the forwarder.
+var ErrPortForwarderNotStarted = errors.New("port forwarder not started")
 
 type PortForwardOptions struct {
 	Namespace  string
@@ -40,10 +44,12 @@ func (pf *PortForwarder) Start() error {
 		pf.options.Namespace, pf.options.PodName)
 
 	hostIP := pf.client.restConfig.Host
+
 	serverURL, err := url.Parse(hostIP)
 	if err != nil {
 		return err
 	}
+
 	serverURL.Path = path
 
 	transport, upgrader, err := spdy.RoundTripperFor(pf.client.restConfig)
@@ -51,7 +57,12 @@ func (pf *PortForwarder) Start() error {
 		return err
 	}
 
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, http.MethodPost, serverURL)
+	dialer := spdy.NewDialer(
+		upgrader,
+		&http.Client{Transport: transport},
+		http.MethodPost,
+		serverURL,
+	)
 
 	ports := []string{fmt.Sprintf("%d:%d", pf.options.LocalPort, pf.options.RemotePort)}
 
@@ -61,12 +72,14 @@ func (pf *PortForwarder) Start() error {
 	}
 
 	pf.pf = fw
+
 	return fw.ForwardPorts()
 }
 
 func (pf *PortForwarder) GetPorts() ([]portforward.ForwardedPort, error) {
 	if pf.pf == nil {
-		return nil, fmt.Errorf("port forwarder not started")
+		return nil, ErrPortForwarderNotStarted
 	}
+
 	return pf.pf.GetPorts()
 }

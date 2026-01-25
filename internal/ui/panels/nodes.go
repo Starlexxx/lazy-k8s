@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 
@@ -55,6 +56,7 @@ func (p *NodesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case nodesLoadedMsg:
 		p.nodes = msg.nodes
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -75,6 +77,7 @@ func (p *NodesPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -127,6 +130,7 @@ func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -143,12 +147,14 @@ func (p *NodesPanel) DetailView(width, height int) string {
 
 	// Status
 	status := k8s.GetNodeStatus(&node)
+
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
 	b.WriteString(p.styles.GetStatusStyle(status).Render(status))
 	b.WriteString("\n")
 
 	// Roles
 	roles := k8s.GetNodeRoles(&node)
+
 	b.WriteString(p.styles.DetailLabel.Render("Roles:"))
 	b.WriteString(p.styles.DetailValue.Render(roles))
 	b.WriteString("\n")
@@ -165,11 +171,13 @@ func (p *NodesPanel) DetailView(width, height int) string {
 
 	// IPs
 	internalIP := k8s.GetNodeInternalIP(&node)
+
 	b.WriteString(p.styles.DetailLabel.Render("Internal IP:"))
 	b.WriteString(p.styles.DetailValue.Render(internalIP))
 	b.WriteString("\n")
 
 	externalIP := k8s.GetNodeExternalIP(&node)
+
 	b.WriteString(p.styles.DetailLabel.Render("External IP:"))
 	b.WriteString(p.styles.DetailValue.Render(externalIP))
 	b.WriteString("\n")
@@ -180,7 +188,15 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString("\n")
 
 	b.WriteString(p.styles.DetailLabel.Render("OS:"))
-	b.WriteString(p.styles.DetailValue.Render(fmt.Sprintf("%s %s", node.Status.NodeInfo.OperatingSystem, node.Status.NodeInfo.OSImage)))
+	b.WriteString(
+		p.styles.DetailValue.Render(
+			fmt.Sprintf(
+				"%s %s",
+				node.Status.NodeInfo.OperatingSystem,
+				node.Status.NodeInfo.OSImage,
+			),
+		),
+	)
 	b.WriteString("\n")
 
 	b.WriteString(p.styles.DetailLabel.Render("Kernel:"))
@@ -193,6 +209,7 @@ func (p *NodesPanel) DetailView(width, height int) string {
 
 	// Capacity
 	cpu, memory := k8s.GetNodeCapacity(&node)
+
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Capacity:"))
 	b.WriteString("\n")
@@ -212,9 +229,12 @@ func (p *NodesPanel) DetailView(width, height int) string {
 
 	for _, cond := range node.Status.Conditions {
 		condStatus := "False"
-		condStyle := p.styles.StatusFailed
+
+		var condStyle lipgloss.Style
+
 		if cond.Status == "True" {
 			condStatus = "True"
+
 			if cond.Type == corev1.NodeReady {
 				condStyle = p.styles.StatusRunning
 			} else {
@@ -225,6 +245,7 @@ func (p *NodesPanel) DetailView(width, height int) string {
 		} else {
 			condStyle = p.styles.StatusRunning
 		}
+
 		b.WriteString(fmt.Sprintf("  %s: %s\n", cond.Type, condStyle.Render(condStatus)))
 	}
 
@@ -237,10 +258,12 @@ func (p *NodesPanel) DetailView(width, height int) string {
 func (p *NodesPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		nodes, err := p.client.ListNodes(ctx)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return nodesLoadedMsg{nodes: nodes}
 	}
 }
@@ -256,6 +279,7 @@ func (p *NodesPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -263,6 +287,7 @@ func (p *NodesPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -270,11 +295,14 @@ func (p *NodesPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	node := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(node)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -282,16 +310,20 @@ func (p *NodesPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	node := p.filtered[p.cursor]
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Name:               %s\n", node.Name))
 	b.WriteString(fmt.Sprintf("Roles:              %s\n", k8s.GetNodeRoles(&node)))
-	b.WriteString(fmt.Sprintf("Age:                %s\n", utils.FormatAgeFromMeta(node.CreationTimestamp)))
+	b.WriteString(
+		fmt.Sprintf("Age:                %s\n", utils.FormatAgeFromMeta(node.CreationTimestamp)),
+	)
 	b.WriteString(fmt.Sprintf("Taints:             %d\n", len(node.Spec.Taints)))
 
 	if len(node.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range node.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -303,20 +335,25 @@ func (p *NodesPanel) GetSelectedDescribe() (string, error) {
 	b.WriteString(fmt.Sprintf("  Boot ID:         %s\n", node.Status.NodeInfo.BootID))
 	b.WriteString(fmt.Sprintf("  Kernel Version:  %s\n", node.Status.NodeInfo.KernelVersion))
 	b.WriteString(fmt.Sprintf("  OS Image:        %s\n", node.Status.NodeInfo.OSImage))
-	b.WriteString(fmt.Sprintf("  Container Runtime: %s\n", node.Status.NodeInfo.ContainerRuntimeVersion))
+	b.WriteString(
+		fmt.Sprintf("  Container Runtime: %s\n", node.Status.NodeInfo.ContainerRuntimeVersion),
+	)
 	b.WriteString(fmt.Sprintf("  Kubelet Version: %s\n", node.Status.NodeInfo.KubeletVersion))
 
 	b.WriteString("\nCapacity:\n")
+
 	for resource, qty := range node.Status.Capacity {
 		b.WriteString(fmt.Sprintf("  %s: %s\n", resource, qty.String()))
 	}
 
 	b.WriteString("\nAllocatable:\n")
+
 	for resource, qty := range node.Status.Allocatable {
 		b.WriteString(fmt.Sprintf("  %s: %s\n", resource, qty.String()))
 	}
 
 	b.WriteString("\nConditions:\n")
+
 	for _, cond := range node.Status.Conditions {
 		b.WriteString(fmt.Sprintf("  %s: %s (%s)\n", cond.Type, cond.Status, cond.Reason))
 	}
@@ -327,6 +364,7 @@ func (p *NodesPanel) GetSelectedDescribe() (string, error) {
 func (p *NodesPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.nodes
+
 		return
 	}
 

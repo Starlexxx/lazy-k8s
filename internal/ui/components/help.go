@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
@@ -109,6 +110,7 @@ func (h *Help) View(width, height int) string {
 			desc := descStyle.Render(binding.desc)
 			col.WriteString("  " + key + desc + "\n")
 		}
+
 		col.WriteString("\n")
 	}
 

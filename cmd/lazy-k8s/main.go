@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/lazyk8s/lazy-k8s/internal/app"
 	"github.com/lazyk8s/lazy-k8s/internal/config"
-	"github.com/spf13/cobra"
 )
 
 var version = "dev"
@@ -33,9 +34,11 @@ keyboard-driven interface for common Kubernetes operations.`,
 			if kubeconfig != "" {
 				cfg.Kubeconfig = kubeconfig
 			}
+
 			if context != "" {
 				cfg.Context = context
 			}
+
 			if namespace != "" {
 				cfg.Namespace = namespace
 			}

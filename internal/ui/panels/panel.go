@@ -6,26 +6,24 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var (
-	ErrNoSelection = errors.New("no item selected")
-)
+var ErrNoSelection = errors.New("no item selected")
 
-// RefreshMsg is sent to request a panel refresh
+// RefreshMsg is sent to request a panel refresh.
 type RefreshMsg struct {
 	PanelName string
 }
 
-// ErrorMsg is sent when an error occurs
+// ErrorMsg is sent when an error occurs.
 type ErrorMsg struct {
 	Error error
 }
 
-// StatusMsg is sent to display a status message
+// StatusMsg is sent to display a status message.
 type StatusMsg struct {
 	Message string
 }
 
-// Panel is the interface that all resource panels must implement
+// Panel is the interface that all resource panels must implement.
 type Panel interface {
 	// Init initializes the panel and returns initial commands
 	Init() tea.Cmd
@@ -79,7 +77,7 @@ type Panel interface {
 	GetSelectedDescribe() (string, error)
 }
 
-// BasePanel provides common functionality for panels
+// BasePanel provides common functionality for panels.
 type BasePanel struct {
 	title       string
 	shortcutKey string

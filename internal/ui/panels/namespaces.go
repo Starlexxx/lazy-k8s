@@ -55,6 +55,7 @@ func (p *NamespacesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 			if p.Cursor() < len(p.filtered) {
 				ns := p.filtered[p.Cursor()]
 				p.client.SetNamespace(ns.Name)
+
 				return p, func() tea.Msg {
 					return StatusMsg{Message: fmt.Sprintf("Switched to namespace: %s", ns.Name)}
 				}
@@ -64,6 +65,7 @@ func (p *NamespacesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case namespacesLoadedMsg:
 		p.namespaces = msg.namespaces
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -85,6 +87,7 @@ func (p *NamespacesPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	// Calculate visible items
@@ -143,6 +146,7 @@ func (p *NamespacesPanel) renderNamespaceLine(ns corev1.Namespace, selected bool
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -172,6 +176,7 @@ func (p *NamespacesPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Labels:"))
 		b.WriteString("\n")
+
 		for k, v := range ns.Labels {
 			b.WriteString(fmt.Sprintf("  %s: %s\n", k, v))
 		}
@@ -182,6 +187,7 @@ func (p *NamespacesPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Annotations:"))
 		b.WriteString("\n")
+
 		for k, v := range ns.Annotations {
 			b.WriteString(fmt.Sprintf("  %s: %s\n", k, utils.Truncate(v, width-len(k)-6)))
 		}
@@ -193,10 +199,12 @@ func (p *NamespacesPanel) DetailView(width, height int) string {
 func (p *NamespacesPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		namespaces, err := p.client.ListNamespaces(ctx)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return namespacesLoadedMsg{namespaces: namespaces}
 	}
 }
@@ -207,12 +215,15 @@ func (p *NamespacesPanel) Delete() tea.Cmd {
 	}
 
 	ns := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeleteNamespace(ctx, ns.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted namespace: %s", ns.Name)}
 	}
 }
@@ -221,6 +232,7 @@ func (p *NamespacesPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -228,6 +240,7 @@ func (p *NamespacesPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -235,11 +248,14 @@ func (p *NamespacesPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	ns := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(ns)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -247,6 +263,7 @@ func (p *NamespacesPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	ns := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -256,6 +273,7 @@ func (p *NamespacesPanel) GetSelectedDescribe() (string, error) {
 
 	if len(ns.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range ns.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -263,6 +281,7 @@ func (p *NamespacesPanel) GetSelectedDescribe() (string, error) {
 
 	if len(ns.Annotations) > 0 {
 		b.WriteString("\nAnnotations:\n")
+
 		for k, v := range ns.Annotations {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -274,6 +293,7 @@ func (p *NamespacesPanel) GetSelectedDescribe() (string, error) {
 func (p *NamespacesPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.namespaces
+
 		return
 	}
 

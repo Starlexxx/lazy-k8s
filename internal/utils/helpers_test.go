@@ -119,12 +119,27 @@ func TestWrapText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := WrapText(tt.text, tt.width)
 			if len(result) != len(tt.expected) {
-				t.Errorf("WrapText(%q, %d) returned %d lines, want %d", tt.text, tt.width, len(result), len(tt.expected))
+				t.Errorf(
+					"WrapText(%q, %d) returned %d lines, want %d",
+					tt.text,
+					tt.width,
+					len(result),
+					len(tt.expected),
+				)
+
 				return
 			}
+
 			for i, line := range result {
 				if line != tt.expected[i] {
-					t.Errorf("WrapText(%q, %d)[%d] = %q, want %q", tt.text, tt.width, i, line, tt.expected[i])
+					t.Errorf(
+						"WrapText(%q, %d)[%d] = %q, want %q",
+						tt.text,
+						tt.width,
+						i,
+						line,
+						tt.expected[i],
+					)
 				}
 			}
 		})
@@ -192,8 +207,10 @@ func TestFilterStrings(t *testing.T) {
 			result := FilterStrings(tt.slice, tt.predicate)
 			if len(result) != len(tt.expected) {
 				t.Errorf("FilterStrings returned %d items, want %d", len(result), len(tt.expected))
+
 				return
 			}
+
 			for i, item := range result {
 				if item != tt.expected[i] {
 					t.Errorf("FilterStrings[%d] = %q, want %q", i, item, tt.expected[i])
@@ -255,7 +272,14 @@ func TestClamp(t *testing.T) {
 	for _, tt := range tests {
 		result := Clamp(tt.value, tt.min, tt.max)
 		if result != tt.expected {
-			t.Errorf("Clamp(%d, %d, %d) = %d, want %d", tt.value, tt.min, tt.max, result, tt.expected)
+			t.Errorf(
+				"Clamp(%d, %d, %d) = %d, want %d",
+				tt.value,
+				tt.min,
+				tt.max,
+				result,
+				tt.expected,
+			)
 		}
 	}
 }

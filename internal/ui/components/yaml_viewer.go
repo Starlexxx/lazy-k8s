@@ -5,16 +5,17 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
 type YamlViewer struct {
-	styles   *theme.Styles
-	content  string
-	lines    []string
-	offset   int
-	width    int
-	height   int
+	styles  *theme.Styles
+	content string
+	lines   []string
+	offset  int
+	width   int
+	height  int
 }
 
 func NewYamlViewer(styles *theme.Styles) *YamlViewer {
@@ -42,6 +43,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			if y.offset < maxOffset {
 				y.offset++
 			}
@@ -52,6 +54,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			y.offset = maxOffset
 		case "pgup", "ctrl+u":
 			y.offset -= y.height / 2
@@ -63,12 +66,14 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			y.offset += y.height / 2
 			if y.offset > maxOffset {
 				y.offset = maxOffset
 			}
 		}
 	}
+
 	return y, nil
 }
 
@@ -112,6 +117,7 @@ func (y *YamlViewer) View(width, height int) string {
 		indicator := strings.Repeat("─", int(float64(width-10)*scrollPos))
 		indicator += "█"
 		indicator += strings.Repeat("─", width-10-len(indicator))
+
 		b.WriteString("\n")
 		b.WriteString(y.styles.Muted.Render(indicator))
 	}
@@ -147,7 +153,8 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 		rest := trimmed[colonIdx:]
 
 		// Check if it's just a key with no value (nested object)
-		if len(rest) == 1 || (len(rest) > 1 && rest[1] == ' ' && len(strings.TrimSpace(rest[1:])) == 0) {
+		if len(rest) == 1 ||
+			(len(rest) > 1 && rest[1] == ' ' && len(strings.TrimSpace(rest[1:])) == 0) {
 			return indent + keyStyle.Render(key) + valueStyle.Render(":")
 		}
 
@@ -158,7 +165,13 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 
 		// String value (quoted)
 		if strings.HasPrefix(value, "\"") || strings.HasPrefix(value, "'") {
-			return indent + keyStyle.Render(key) + valueStyle.Render(": ") + stringStyle.Render(value)
+			return indent + keyStyle.Render(
+				key,
+			) + valueStyle.Render(
+				": ",
+			) + stringStyle.Render(
+				value,
+			)
 		}
 
 		return indent + keyStyle.Render(key) + valueStyle.Render(": "+value)

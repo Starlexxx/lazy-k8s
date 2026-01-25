@@ -55,6 +55,7 @@ func (p *ConfigMapsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case configmapsLoadedMsg:
 		p.configmaps = msg.configmaps
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -75,6 +76,7 @@ func (p *ConfigMapsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -126,6 +128,7 @@ func (p *ConfigMapsPanel) renderConfigMapLine(cm corev1.ConfigMap, selected bool
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -159,6 +162,7 @@ func (p *ConfigMapsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Data:"))
 		b.WriteString("\n")
+
 		for k, v := range cm.Data {
 			preview := utils.Truncate(strings.ReplaceAll(v, "\n", "\\n"), 50)
 			b.WriteString(fmt.Sprintf("  %s: %s\n", k, preview))
@@ -170,6 +174,7 @@ func (p *ConfigMapsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Binary Data:"))
 		b.WriteString("\n")
+
 		for k := range cm.BinaryData {
 			b.WriteString(fmt.Sprintf("  %s: <binary>\n", k))
 		}
@@ -184,8 +189,11 @@ func (p *ConfigMapsPanel) DetailView(width, height int) string {
 func (p *ConfigMapsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var configmaps []corev1.ConfigMap
-		var err error
+
+		var (
+			configmaps []corev1.ConfigMap
+			err        error
+		)
 
 		if p.allNs {
 			configmaps, err = p.client.ListConfigMapsAllNamespaces(ctx)
@@ -196,6 +204,7 @@ func (p *ConfigMapsPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return configmapsLoadedMsg{configmaps: configmaps}
 	}
 }
@@ -206,12 +215,15 @@ func (p *ConfigMapsPanel) Delete() tea.Cmd {
 	}
 
 	cm := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeleteConfigMap(ctx, cm.Namespace, cm.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted configmap: %s", cm.Name)}
 	}
 }
@@ -220,6 +232,7 @@ func (p *ConfigMapsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -227,6 +240,7 @@ func (p *ConfigMapsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -234,11 +248,14 @@ func (p *ConfigMapsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	cm := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(cm)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -246,6 +263,7 @@ func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	cm := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -255,6 +273,7 @@ func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
 
 	if len(cm.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range cm.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -262,6 +281,7 @@ func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
 
 	if len(cm.Data) > 0 {
 		b.WriteString("\nData:\n")
+
 		for k, v := range cm.Data {
 			b.WriteString(fmt.Sprintf("====\n%s:\n----\n%s\n", k, v))
 		}
@@ -273,6 +293,7 @@ func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
 func (p *ConfigMapsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.configmaps
+
 		return
 	}
 

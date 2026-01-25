@@ -190,12 +190,12 @@ func NewKeyMap() *KeyMap {
 	}
 }
 
-// ShortHelp returns key bindings for short help view
+// ShortHelp returns key bindings for short help view.
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Help, k.Quit, k.NextPanel, k.Search}
 }
 
-// FullHelp returns key bindings for the full help view
+// FullHelp returns key bindings for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},

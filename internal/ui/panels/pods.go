@@ -55,6 +55,7 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case podsLoadedMsg:
 		p.pods = msg.pods
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -76,6 +77,7 @@ func (p *PodsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	// Calculate visible items
@@ -133,6 +135,7 @@ func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -149,6 +152,7 @@ func (p *PodsPanel) DetailView(width, height int) string {
 
 	// Basic info
 	status := k8s.GetPodStatus(&pod)
+
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
 	b.WriteString(p.styles.GetStatusStyle(status).Render(status))
 	b.WriteString("\n")
@@ -191,9 +195,11 @@ func (p *PodsPanel) DetailView(width, height int) string {
 
 	for _, container := range pod.Spec.Containers {
 		var cs *corev1.ContainerStatus
+
 		for i := range pod.Status.ContainerStatuses {
 			if pod.Status.ContainerStatuses[i].Name == container.Name {
 				cs = &pod.Status.ContainerStatuses[i]
+
 				break
 			}
 		}
@@ -206,6 +212,7 @@ func (p *PodsPanel) DetailView(width, height int) string {
 			if cs.Ready {
 				ready = "true"
 			}
+
 			restarts = cs.RestartCount
 
 			if cs.State.Running != nil {
@@ -237,8 +244,11 @@ func (p *PodsPanel) DetailView(width, height int) string {
 func (p *PodsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var pods []corev1.Pod
-		var err error
+
+		var (
+			pods []corev1.Pod
+			err  error
+		)
 
 		if p.allNs {
 			pods, err = p.client.ListPodsAllNamespaces(ctx)
@@ -249,6 +259,7 @@ func (p *PodsPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return podsLoadedMsg{pods: pods}
 	}
 }
@@ -259,12 +270,15 @@ func (p *PodsPanel) Delete() tea.Cmd {
 	}
 
 	pod := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeletePod(ctx, pod.Namespace, pod.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted pod: %s", pod.Name)}
 	}
 }
@@ -273,6 +287,7 @@ func (p *PodsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -280,6 +295,7 @@ func (p *PodsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -287,6 +303,7 @@ func (p *PodsPanel) SelectedPod() *corev1.Pod {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -294,11 +311,14 @@ func (p *PodsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	pod := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(pod)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -306,22 +326,26 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	pod := p.filtered[p.cursor]
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Name:         %s\n", pod.Name))
 	b.WriteString(fmt.Sprintf("Namespace:    %s\n", pod.Namespace))
 	b.WriteString(fmt.Sprintf("Node:         %s\n", pod.Spec.NodeName))
+
 	startTime := ""
 	if pod.Status.StartTime != nil {
 		startTime = utils.FormatTimestampFromMeta(*pod.Status.StartTime)
 	}
+
 	b.WriteString(fmt.Sprintf("Start Time:   %s\n", startTime))
 	b.WriteString(fmt.Sprintf("Status:       %s\n", k8s.GetPodStatus(&pod)))
 	b.WriteString(fmt.Sprintf("IP:           %s\n", pod.Status.PodIP))
 
 	if len(pod.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range pod.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -329,22 +353,26 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 
 	if len(pod.Annotations) > 0 {
 		b.WriteString("\nAnnotations:\n")
+
 		for k, v := range pod.Annotations {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
 	}
 
 	b.WriteString("\nContainers:\n")
+
 	for _, container := range pod.Spec.Containers {
 		b.WriteString(fmt.Sprintf("  %s:\n", container.Name))
 		b.WriteString(fmt.Sprintf("    Image:   %s\n", container.Image))
 
 		if len(container.Ports) > 0 {
 			b.WriteString("    Ports:   ")
+
 			var ports []string
 			for _, port := range container.Ports {
 				ports = append(ports, fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol))
 			}
+
 			b.WriteString(strings.Join(ports, ", "))
 			b.WriteString("\n")
 		}
@@ -354,6 +382,7 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 			if cs.Name == container.Name {
 				b.WriteString(fmt.Sprintf("    Ready:   %v\n", cs.Ready))
 				b.WriteString(fmt.Sprintf("    Restarts: %d\n", cs.RestartCount))
+
 				break
 			}
 		}
@@ -365,6 +394,7 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 func (p *PodsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.pods
+
 		return
 	}
 

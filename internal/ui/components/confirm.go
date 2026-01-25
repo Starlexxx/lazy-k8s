@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
@@ -54,6 +55,7 @@ func (c *Confirm) Update(msg tea.Msg) (*Confirm, tea.Cmd) {
 			c.done = true
 		}
 	}
+
 	return c, nil
 }
 
@@ -112,6 +114,7 @@ func (c *Confirm) Action() tea.Cmd {
 	if c.action != nil {
 		return c.action()
 	}
+
 	return nil
 }
 
