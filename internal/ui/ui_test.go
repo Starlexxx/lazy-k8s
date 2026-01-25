@@ -1,18 +1,20 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lazyk8s/lazy-k8s/internal/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/lazyk8s/lazy-k8s/internal/config"
 )
 
-// TestViewMode tests view mode constants
+// TestViewMode tests view mode constants.
 func TestViewMode(t *testing.T) {
 	tests := []struct {
 		mode     ViewMode
@@ -35,7 +37,7 @@ func TestViewMode(t *testing.T) {
 	}
 }
 
-// TestK8sClientWithFake tests that fake k8s client works for testing
+// TestK8sClientWithFake tests that fake k8s client works for testing.
 func TestK8sClientWithFake(t *testing.T) {
 	fakeClientset := fake.NewSimpleClientset(
 		&corev1.Namespace{
@@ -57,28 +59,35 @@ func TestK8sClientWithFake(t *testing.T) {
 	)
 
 	// Test listing namespaces
-	namespaces, err := fakeClientset.CoreV1().Namespaces().List(nil, metav1.ListOptions{})
+	namespaces, err := fakeClientset.CoreV1().
+		Namespaces().
+		List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list namespaces: %v", err)
 	}
+
 	if len(namespaces.Items) != 1 {
 		t.Errorf("Expected 1 namespace, got %d", len(namespaces.Items))
 	}
 
 	// Test listing pods
-	pods, err := fakeClientset.CoreV1().Pods("default").List(nil, metav1.ListOptions{})
+	pods, err := fakeClientset.CoreV1().
+		Pods("default").
+		List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		t.Fatalf("Failed to list pods: %v", err)
 	}
+
 	if len(pods.Items) != 1 {
 		t.Errorf("Expected 1 pod, got %d", len(pods.Items))
 	}
+
 	if pods.Items[0].Name != "test-pod" {
 		t.Errorf("Expected pod name 'test-pod', got %q", pods.Items[0].Name)
 	}
 }
 
-// TestTeaKeyMsg tests tea.KeyMsg handling utilities
+// TestTeaKeyMsg tests tea.KeyMsg handling utilities.
 func TestTeaKeyMsg(t *testing.T) {
 	// Test creating key messages
 	tests := []struct {
@@ -105,19 +114,20 @@ func TestTeaKeyMsg(t *testing.T) {
 	}
 }
 
-// TestWindowSizeMsg tests tea.WindowSizeMsg
+// TestWindowSizeMsg tests tea.WindowSizeMsg.
 func TestWindowSizeMsg(t *testing.T) {
 	msg := tea.WindowSizeMsg{Width: 100, Height: 50}
 
 	if msg.Width != 100 {
 		t.Errorf("Width = %d, want 100", msg.Width)
 	}
+
 	if msg.Height != 50 {
 		t.Errorf("Height = %d, want 50", msg.Height)
 	}
 }
 
-// TestConfigStructs tests config struct initialization
+// TestConfigStructs tests config struct initialization.
 func TestConfigStructs(t *testing.T) {
 	cfg := &config.Config{
 		Namespace: "default",
@@ -172,7 +182,7 @@ func TestConfigStructs(t *testing.T) {
 	}
 }
 
-// TestRenderSwitchViewLogic tests the switch view rendering logic
+// TestRenderSwitchViewLogic tests the switch view rendering logic.
 func TestRenderSwitchViewLogic(t *testing.T) {
 	// Test context list navigation
 	contextList := []string{"dev", "staging", "prod"}
@@ -182,6 +192,7 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	if selectIdx < len(contextList)-1 {
 		selectIdx++
 	}
+
 	if selectIdx != 1 {
 		t.Errorf("After moving down, selectIdx = %d, want 1", selectIdx)
 	}
@@ -190,6 +201,7 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	if selectIdx > 0 {
 		selectIdx--
 	}
+
 	if selectIdx != 0 {
 		t.Errorf("After moving up, selectIdx = %d, want 0", selectIdx)
 	}
@@ -198,6 +210,7 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	if selectIdx > 0 {
 		selectIdx--
 	}
+
 	if selectIdx != 0 {
 		t.Errorf("At boundary, selectIdx = %d, want 0", selectIdx)
 	}
@@ -207,12 +220,13 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	if selectIdx < len(contextList)-1 {
 		selectIdx++
 	}
+
 	if selectIdx != 2 {
 		t.Errorf("At max boundary, selectIdx = %d, want 2", selectIdx)
 	}
 }
 
-// TestPanelNavigationLogic tests panel navigation logic
+// TestPanelNavigationLogic tests panel navigation logic.
 func TestPanelNavigationLogic(t *testing.T) {
 	numPanels := 4
 	activePanelIdx := 0
@@ -225,6 +239,7 @@ func TestPanelNavigationLogic(t *testing.T) {
 
 	// Test wrap around
 	activePanelIdx = 3
+
 	activePanelIdx = (activePanelIdx + 1) % numPanels
 	if activePanelIdx != 0 {
 		t.Errorf("After wrap around, idx = %d, want 0", activePanelIdx)
@@ -232,6 +247,7 @@ func TestPanelNavigationLogic(t *testing.T) {
 
 	// Test previous panel
 	activePanelIdx = 1
+
 	activePanelIdx = (activePanelIdx - 1 + numPanels) % numPanels
 	if activePanelIdx != 0 {
 		t.Errorf("After prev panel, idx = %d, want 0", activePanelIdx)
@@ -239,13 +255,14 @@ func TestPanelNavigationLogic(t *testing.T) {
 
 	// Test previous panel wrap around
 	activePanelIdx = 0
+
 	activePanelIdx = (activePanelIdx - 1 + numPanels) % numPanels
 	if activePanelIdx != 3 {
 		t.Errorf("After prev panel wrap, idx = %d, want 3", activePanelIdx)
 	}
 }
 
-// TestSelectPanelLogic tests panel selection logic
+// TestSelectPanelLogic tests panel selection logic.
 func TestSelectPanelLogic(t *testing.T) {
 	numPanels := 4
 
@@ -264,13 +281,18 @@ func TestSelectPanelLogic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			isValid := tt.selectIdx >= 0 && tt.selectIdx < numPanels
 			if isValid != tt.shouldApply {
-				t.Errorf("selectPanel(%d) valid = %v, want %v", tt.selectIdx, isValid, tt.shouldApply)
+				t.Errorf(
+					"selectPanel(%d) valid = %v, want %v",
+					tt.selectIdx,
+					isValid,
+					tt.shouldApply,
+				)
 			}
 		})
 	}
 }
 
-// TestViewModeTransitions tests view mode transition logic
+// TestViewModeTransitions tests view mode transition logic.
 func TestViewModeTransitions(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -296,7 +318,7 @@ func TestViewModeTransitions(t *testing.T) {
 	}
 }
 
-// TestShowAllNamespaceFlag tests the showAllNs flag logic
+// TestShowAllNamespaceFlag tests the showAllNs flag logic.
 func TestShowAllNamespaceFlag(t *testing.T) {
 	showAllNs := false
 
@@ -313,7 +335,7 @@ func TestShowAllNamespaceFlag(t *testing.T) {
 	}
 }
 
-// TestSearchState tests search state logic
+// TestSearchState tests search state logic.
 func TestSearchState(t *testing.T) {
 	searchActive := false
 	searchQuery := ""
@@ -333,15 +355,17 @@ func TestSearchState(t *testing.T) {
 	// Clear search
 	searchActive = false
 	searchQuery = ""
+
 	if searchActive {
 		t.Error("searchActive should be false after clear")
 	}
+
 	if searchQuery != "" {
 		t.Error("searchQuery should be empty after clear")
 	}
 }
 
-// TestStringContains tests string matching for view rendering
+// TestStringContains tests string matching for view rendering.
 func TestStringContains(t *testing.T) {
 	tests := []struct {
 		haystack string
@@ -369,7 +393,7 @@ func TestStringContains(t *testing.T) {
 }
 
 // Mock k8s.Client interface methods for documentation
-// Note: The real k8s.Client requires a working kubeconfig
+// Note: The real k8s.Client requires a working kubeconfig.
 type mockK8sClientMethods struct {
 	contexts  []string
 	namespace string
@@ -425,6 +449,7 @@ func TestMockK8sClientMethods(t *testing.T) {
 
 	// Test SetNamespace
 	mock.SetNamespace("kube-system")
+
 	if mock.CurrentNamespace() != "kube-system" {
 		t.Errorf("After SetNamespace, CurrentNamespace() = %q, want %q",
 			mock.CurrentNamespace(), "kube-system")

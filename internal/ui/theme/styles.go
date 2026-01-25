@@ -2,20 +2,21 @@ package theme
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/config"
 )
 
 type Styles struct {
 	// Colors
-	Primary     lipgloss.Color
-	Secondary   lipgloss.Color
-	Error       lipgloss.Color
-	Warning     lipgloss.Color
-	Background  lipgloss.Color
-	Text        lipgloss.Color
-	Border      lipgloss.Color
-	MutedColor  lipgloss.Color
-	Success     lipgloss.Color
+	Primary    lipgloss.Color
+	Secondary  lipgloss.Color
+	Error      lipgloss.Color
+	Warning    lipgloss.Color
+	Background lipgloss.Color
+	Text       lipgloss.Color
+	Border     lipgloss.Color
+	MutedColor lipgloss.Color
+	Success    lipgloss.Color
 
 	// Muted text style
 	Muted lipgloss.Style
@@ -69,11 +70,11 @@ type Styles struct {
 	InputPrompt lipgloss.Style
 
 	// Specific resource status styles
-	StatusRunning    lipgloss.Style
-	StatusPending    lipgloss.Style
-	StatusFailed     lipgloss.Style
-	StatusSucceeded  lipgloss.Style
-	StatusUnknown    lipgloss.Style
+	StatusRunning     lipgloss.Style
+	StatusPending     lipgloss.Style
+	StatusFailed      lipgloss.Style
+	StatusSucceeded   lipgloss.Style
+	StatusUnknown     lipgloss.Style
 	StatusTerminating lipgloss.Style
 }
 

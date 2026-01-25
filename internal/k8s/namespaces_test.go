@@ -44,6 +44,7 @@ func TestListNamespaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListNamespaces returned unexpected error: %v", err)
 	}
+
 	if len(namespaces) != 3 {
 		t.Errorf("ListNamespaces returned %d namespaces, want 3", len(namespaces))
 	}
@@ -53,6 +54,7 @@ func TestListNamespaces(t *testing.T) {
 	for _, ns := range namespaces {
 		foundNames[ns.Name] = true
 	}
+
 	for _, expected := range []string{"default", "kube-system", "my-app"} {
 		if !foundNames[expected] {
 			t.Errorf("Expected namespace %q not found", expected)
@@ -83,9 +85,11 @@ func TestGetNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetNamespace returned unexpected error: %v", err)
 	}
+
 	if ns.Name != "default" {
 		t.Errorf("GetNamespace returned namespace with name %q, want %q", ns.Name, "default")
 	}
+
 	if ns.Labels["name"] != "default" {
 		t.Errorf("GetNamespace returned namespace with wrong label")
 	}
@@ -108,8 +112,13 @@ func TestCreateNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateNamespace returned unexpected error: %v", err)
 	}
+
 	if ns.Name != "new-namespace" {
-		t.Errorf("CreateNamespace returned namespace with name %q, want %q", ns.Name, "new-namespace")
+		t.Errorf(
+			"CreateNamespace returned namespace with name %q, want %q",
+			ns.Name,
+			"new-namespace",
+		)
 	}
 
 	// Verify namespace was created
@@ -117,6 +126,7 @@ func TestCreateNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetNamespace returned unexpected error: %v", err)
 	}
+
 	if created.Name != "new-namespace" {
 		t.Errorf("Created namespace has name %q, want %q", created.Name, "new-namespace")
 	}

@@ -56,6 +56,7 @@ func (p *PVPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case pvLoadedMsg:
 		p.pvs = msg.pvs
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -76,6 +77,7 @@ func (p *PVPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -128,6 +130,7 @@ func (p *PVPanel) renderPVLine(pv corev1.PersistentVolume, selected bool) string
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -143,20 +146,24 @@ func (p *PVPanel) DetailView(width, height int) string {
 	b.WriteString("\n\n")
 
 	status := string(pv.Status.Phase)
+
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
 	b.WriteString(p.styles.GetStatusStyle(status).Render(status))
 	b.WriteString("\n")
 
 	capacity := pv.Spec.Capacity[corev1.ResourceStorage]
+
 	b.WriteString(p.styles.DetailLabel.Render("Capacity:"))
 	b.WriteString(p.styles.DetailValue.Render(capacity.String()))
 	b.WriteString("\n")
 
 	b.WriteString(p.styles.DetailLabel.Render("Access Modes:"))
+
 	modes := make([]string, 0)
 	for _, mode := range pv.Spec.AccessModes {
 		modes = append(modes, string(mode))
 	}
+
 	b.WriteString(p.styles.DetailValue.Render(strings.Join(modes, ", ")))
 	b.WriteString("\n")
 
@@ -191,13 +198,16 @@ func (p *PVPanel) DetailView(width, height int) string {
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Source:"))
 	b.WriteString("\n")
+
 	if pv.Spec.HostPath != nil {
 		b.WriteString(p.styles.DetailLabel.Render("HostPath:"))
 		b.WriteString(p.styles.DetailValue.Render(pv.Spec.HostPath.Path))
 		b.WriteString("\n")
 	} else if pv.Spec.NFS != nil {
 		b.WriteString(p.styles.DetailLabel.Render("NFS:"))
-		b.WriteString(p.styles.DetailValue.Render(fmt.Sprintf("%s:%s", pv.Spec.NFS.Server, pv.Spec.NFS.Path)))
+		b.WriteString(
+			p.styles.DetailValue.Render(fmt.Sprintf("%s:%s", pv.Spec.NFS.Server, pv.Spec.NFS.Path)),
+		)
 		b.WriteString("\n")
 	} else if pv.Spec.CSI != nil {
 		b.WriteString(p.styles.DetailLabel.Render("CSI Driver:"))
@@ -214,10 +224,15 @@ func (p *PVPanel) DetailView(width, height int) string {
 func (p *PVPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		pvs, err := p.client.Clientset().CoreV1().PersistentVolumes().List(ctx, metav1.ListOptions{})
+
+		pvs, err := p.client.Clientset().
+			CoreV1().
+			PersistentVolumes().
+			List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return pvLoadedMsg{pvs: pvs.Items}
 	}
 }
@@ -228,12 +243,18 @@ func (p *PVPanel) Delete() tea.Cmd {
 	}
 
 	pv := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := p.client.Clientset().CoreV1().PersistentVolumes().Delete(ctx, pv.Name, metav1.DeleteOptions{})
+
+		err := p.client.Clientset().
+			CoreV1().
+			PersistentVolumes().
+			Delete(ctx, pv.Name, metav1.DeleteOptions{})
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted PV: %s", pv.Name)}
 	}
 }
@@ -242,6 +263,7 @@ func (p *PVPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -249,6 +271,7 @@ func (p *PVPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -256,11 +279,14 @@ func (p *PVPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	pv := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(pv)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -268,6 +294,7 @@ func (p *PVPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	pv := p.filtered[p.cursor]
 
 	var b strings.Builder
@@ -281,16 +308,24 @@ func (p *PVPanel) GetSelectedDescribe() (string, error) {
 	for _, mode := range pv.Spec.AccessModes {
 		modes = append(modes, string(mode))
 	}
+
 	b.WriteString(fmt.Sprintf("Access Modes:    %s\n", strings.Join(modes, ", ")))
 	b.WriteString(fmt.Sprintf("Reclaim Policy:  %s\n", pv.Spec.PersistentVolumeReclaimPolicy))
 	b.WriteString(fmt.Sprintf("Storage Class:   %s\n", pv.Spec.StorageClassName))
 
 	if pv.Spec.ClaimRef != nil {
-		b.WriteString(fmt.Sprintf("Claim:           %s/%s\n", pv.Spec.ClaimRef.Namespace, pv.Spec.ClaimRef.Name))
+		b.WriteString(
+			fmt.Sprintf(
+				"Claim:           %s/%s\n",
+				pv.Spec.ClaimRef.Namespace,
+				pv.Spec.ClaimRef.Name,
+			),
+		)
 	}
 
 	if len(pv.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range pv.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -302,6 +337,7 @@ func (p *PVPanel) GetSelectedDescribe() (string, error) {
 func (p *PVPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.pvs
+
 		return
 	}
 

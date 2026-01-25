@@ -29,6 +29,7 @@ func (c *Client) ListNodes(ctx context.Context) ([]corev1.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
@@ -46,30 +47,38 @@ func GetNodeStatus(node *corev1.Node) string {
 			if condition.Status == corev1.ConditionTrue {
 				return "Ready"
 			}
+
 			return "NotReady"
 		}
 	}
+
 	return "Unknown"
 }
 
 func GetNodeRoles(node *corev1.Node) string {
 	roles := ""
+
 	for label := range node.Labels {
-		if label == "node-role.kubernetes.io/master" || label == "node-role.kubernetes.io/control-plane" {
+		switch label {
+		case "node-role.kubernetes.io/master", "node-role.kubernetes.io/control-plane":
 			if roles != "" {
 				roles += ","
 			}
+
 			roles += "control-plane"
-		} else if label == "node-role.kubernetes.io/worker" {
+		case "node-role.kubernetes.io/worker":
 			if roles != "" {
 				roles += ","
 			}
+
 			roles += "worker"
 		}
 	}
+
 	if roles == "" {
 		roles = "<none>"
 	}
+
 	return roles
 }
 
@@ -79,6 +88,7 @@ func GetNodeInternalIP(node *corev1.Node) string {
 			return addr.Address
 		}
 	}
+
 	return "<none>"
 }
 
@@ -88,6 +98,7 @@ func GetNodeExternalIP(node *corev1.Node) string {
 			return addr.Address
 		}
 	}
+
 	return "<none>"
 }
 

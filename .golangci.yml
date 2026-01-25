@@ -1,0 +1,194 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - bodyclose
+    - dogsled
+    - dupl
+    - durationcheck
+    - exhaustive
+    - gocritic
+    - godot
+    - gomoddirectives
+    - goprintffuncname
+    - govet
+    - importas
+    - ineffassign
+    - makezero
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - wastedassign
+    - whitespace
+    - cyclop
+    - errcheck
+    - errorlint
+    - forbidigo
+    - forcetypeassert
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocyclo
+    - gosec
+    - lll
+    - nlreturn
+    - thelper
+    - goheader
+    - gomodguard
+    - asciicheck
+    - funlen
+    - godox
+    - err113
+    - mnd
+    - nestif
+    - wsl_v5
+
+  disable:
+    - exhaustruct
+    - gochecknoglobals
+    - paralleltest
+    - testpackage
+    - wrapcheck
+    - depguard
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - noctx
+          - funlen
+          - gocognit
+          - gocyclo
+          - cyclop
+          - mnd
+          - goconst
+          - lll
+          - dupl
+          - revive
+          - unparam
+          - wastedassign
+          - gocritic
+          - prealloc
+      # Panels have similar structure by design
+      - path: internal/ui/panels/
+        linters:
+          - dupl
+          - mnd
+          - cyclop
+          - gocognit
+      # K8s client methods follow similar patterns
+      - path: internal/k8s/
+        linters:
+          - dupl
+          - revive
+          - mnd
+      # Internal packages don't need exported comments
+      - path: internal/
+        linters:
+          - revive
+          - nestif
+          - funlen
+          - gocritic
+          - goconst
+          - prealloc
+      # Command files
+      - path: cmd/
+        linters:
+          - revive
+      # Utils have acceptable magic numbers for conversions
+      - path: internal/utils/
+        linters:
+          - mnd
+      # UI code has acceptable complexity and magic numbers
+      - path: internal/ui/
+        linters:
+          - mnd
+          - cyclop
+          - gocognit
+          - gocyclo
+          - unparam
+      # Components use magic numbers for layout
+      - path: internal/ui/components/
+        linters:
+          - mnd
+  settings:
+    mnd:
+      checks:
+        - argument
+        - case
+        - condition
+        - operation
+        - return
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+          arguments:
+            - allowTypesBefore: "*testing.T"
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+          arguments:
+            - sayRepetitiveInsteadOfStutters
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+
+    misspell:
+      locale: US
+    nolintlint:
+      allow-unused: false
+      require-specific: false
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - style
+      disabled-checks:
+        - importShadow
+        - unnamedResult
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    - golines
+
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule

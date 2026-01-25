@@ -59,5 +59,6 @@ func (c *Client) GetContainerShell(namespace, podName, container string) []strin
 		{"/bin/sh"},
 		{"sh"},
 	}
+
 	return shells[0]
 }

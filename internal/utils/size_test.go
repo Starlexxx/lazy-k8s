@@ -75,12 +75,16 @@ func TestParseQuantity(t *testing.T) {
 				if err == nil {
 					t.Errorf("ParseQuantity(%q) should have returned an error", tt.input)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Errorf("ParseQuantity(%q) returned unexpected error: %v", tt.input, err)
+
 				return
 			}
+
 			if result != tt.expected {
 				t.Errorf("ParseQuantity(%q) = %d, want %d", tt.input, result, tt.expected)
 			}
@@ -132,12 +136,16 @@ func TestParseCPU(t *testing.T) {
 				if err == nil {
 					t.Errorf("ParseCPU(%q) should have returned an error", tt.input)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Errorf("ParseCPU(%q) returned unexpected error: %v", tt.input, err)
+
 				return
 			}
+
 			if result != tt.expected {
 				t.Errorf("ParseCPU(%q) = %d, want %d", tt.input, result, tt.expected)
 			}
@@ -165,12 +173,16 @@ func TestParseMemory(t *testing.T) {
 				if err == nil {
 					t.Errorf("ParseMemory(%q) should have returned an error", tt.input)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Errorf("ParseMemory(%q) returned unexpected error: %v", tt.input, err)
+
 				return
 			}
+
 			if result != tt.expected {
 				t.Errorf("ParseMemory(%q) = %d, want %d", tt.input, result, tt.expected)
 			}
@@ -181,6 +193,7 @@ func TestParseMemory(t *testing.T) {
 func TestFormatMemory(t *testing.T) {
 	// FormatMemory is an alias for FormatBytesShort
 	result := FormatMemory(5 * MB)
+
 	expected := "5Mi"
 	if result != expected {
 		t.Errorf("FormatMemory(%d) = %q, want %q", 5*MB, result, expected)
@@ -226,7 +239,13 @@ func TestCalculatePercentage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := CalculatePercentage(tt.used, tt.total)
 			if result != tt.expected {
-				t.Errorf("CalculatePercentage(%d, %d) = %f, want %f", tt.used, tt.total, result, tt.expected)
+				t.Errorf(
+					"CalculatePercentage(%d, %d) = %f, want %f",
+					tt.used,
+					tt.total,
+					result,
+					tt.expected,
+				)
 			}
 		})
 	}
@@ -236,6 +255,7 @@ func TestFormatResourceUsage(t *testing.T) {
 	formatter := func(v int64) string { return FormatBytes(v) }
 
 	result := FormatResourceUsage(512*MB, 1*GB, formatter)
+
 	expected := "512.00Mi/1.00Gi (50.0%)"
 	if result != expected {
 		t.Errorf("FormatResourceUsage = %q, want %q", result, expected)
@@ -243,6 +263,7 @@ func TestFormatResourceUsage(t *testing.T) {
 
 	// Test with zero total
 	result = FormatResourceUsage(100, 0, formatter)
+
 	expected = "100B/0B (0.0%)"
 	if result != expected {
 		t.Errorf("FormatResourceUsage with zero total = %q, want %q", result, expected)

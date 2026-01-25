@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
@@ -61,11 +62,13 @@ func (i *Input) Update(msg tea.Msg) (*Input, tea.Cmd) {
 		case "enter":
 			value := i.input.Value()
 			i.Hide()
+
 			return i, func() tea.Msg {
 				return InputSubmitMsg{Value: value}
 			}
 		case "esc":
 			i.Hide()
+
 			return i, func() tea.Msg {
 				return InputCancelMsg{}
 			}
@@ -73,7 +76,9 @@ func (i *Input) Update(msg tea.Msg) (*Input, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+
 	i.input, cmd = i.input.Update(msg)
+
 	return i, cmd
 }
 

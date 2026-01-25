@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lazyk8s/lazy-k8s/internal/k8s"
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
@@ -17,17 +18,17 @@ type LogLineMsg struct {
 }
 
 type LogViewer struct {
-	styles     *theme.Styles
-	lines      []string
-	offset     int
-	width      int
-	height     int
-	follow     bool
-	pod        string
-	namespace  string
-	container  string
-	cancel     context.CancelFunc
-	maxLines   int
+	styles    *theme.Styles
+	lines     []string
+	offset    int
+	width     int
+	height    int
+	follow    bool
+	pod       string
+	namespace string
+	container string
+	cancel    context.CancelFunc
+	maxLines  int
 }
 
 func NewLogViewer(styles *theme.Styles) *LogViewer {
@@ -103,6 +104,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			if l.offset < maxOffset {
 				l.offset++
 			}
@@ -118,6 +120,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			l.offset = maxOffset
 			l.follow = true
 		case "f":
@@ -127,6 +130,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 				if maxOffset < 0 {
 					maxOffset = 0
 				}
+
 				l.offset = maxOffset
 			}
 		case "pgup", "ctrl+u":
@@ -134,16 +138,19 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			if l.offset < 0 {
 				l.offset = 0
 			}
+
 			l.follow = false
 		case "pgdown", "ctrl+d":
 			maxOffset := len(l.lines) - l.height + 6
 			if maxOffset < 0 {
 				maxOffset = 0
 			}
+
 			l.offset += l.height / 2
 			if l.offset > maxOffset {
 				l.offset = maxOffset
 			}
+
 			if l.offset >= maxOffset {
 				l.follow = true
 			}
@@ -167,6 +174,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 				if maxOffset < 0 {
 					maxOffset = 0
 				}
+
 				l.offset = maxOffset
 			}
 		}
@@ -266,9 +274,11 @@ func (l *LogViewer) highlightLogLine(line string) string {
 	lower := strings.ToLower(line)
 
 	// Check for log levels
-	if strings.Contains(lower, "error") || strings.Contains(lower, "fatal") || strings.Contains(lower, "panic") {
+	if strings.Contains(lower, "error") || strings.Contains(lower, "fatal") ||
+		strings.Contains(lower, "panic") {
 		return errorStyle.Render(line)
 	}
+
 	if strings.Contains(lower, "warn") {
 		return warnStyle.Render(line)
 	}

@@ -79,6 +79,7 @@ func TestFormatTimestamp(t *testing.T) {
 	// Test specific time
 	specificTime := time.Date(2024, 1, 15, 14, 30, 45, 0, time.UTC)
 	result = FormatTimestamp(specificTime)
+
 	expected := "2024-01-15 14:30:45"
 	if result != expected {
 		t.Errorf("FormatTimestamp(%v) = %q, want %q", specificTime, result, expected)
@@ -95,6 +96,7 @@ func TestFormatTimestampFromMeta(t *testing.T) {
 	// Test specific time
 	specificTime := metav1.NewTime(time.Date(2024, 6, 20, 10, 15, 30, 0, time.UTC))
 	result = FormatTimestampFromMeta(specificTime)
+
 	expected := "2024-06-20 10:15:30"
 	if result != expected {
 		t.Errorf("FormatTimestampFromMeta(%v) = %q, want %q", specificTime, result, expected)
@@ -124,12 +126,16 @@ func TestParseDuration(t *testing.T) {
 				if err == nil {
 					t.Errorf("ParseDuration(%q) should have returned an error", tt.input)
 				}
+
 				return
 			}
+
 			if err != nil {
 				t.Errorf("ParseDuration(%q) returned unexpected error: %v", tt.input, err)
+
 				return
 			}
+
 			if result != tt.expected {
 				t.Errorf("ParseDuration(%q) = %v, want %v", tt.input, result, tt.expected)
 			}

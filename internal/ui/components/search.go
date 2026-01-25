@@ -3,6 +3,7 @@ package components
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
@@ -46,11 +47,14 @@ func (s *Search) SetValue(v string) {
 
 func (s *Search) Update(msg tea.Msg) (*Search, tea.Cmd) {
 	var cmd tea.Cmd
+
 	s.input, cmd = s.input.Update(msg)
+
 	return s, cmd
 }
 
 func (s *Search) View(width int) string {
 	s.input.Width = width - 10
+
 	return s.styles.Input.Width(width - 4).Render(s.input.View())
 }

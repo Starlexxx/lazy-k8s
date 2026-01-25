@@ -55,6 +55,7 @@ func (p *SecretsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case secretsLoadedMsg:
 		p.secrets = msg.secrets
 		p.applyFilter()
+
 		return p, nil
 
 	case RefreshMsg:
@@ -75,6 +76,7 @@ func (p *SecretsPanel) View() string {
 	} else {
 		b.WriteString(p.styles.PanelTitle.Render(title))
 	}
+
 	b.WriteString("\n")
 
 	visibleHeight := p.height - 3
@@ -126,6 +128,7 @@ func (p *SecretsPanel) renderSecretLine(secret corev1.Secret, selected bool) str
 	} else if selected {
 		return p.styles.ListItemSelected.Render(line)
 	}
+
 	return p.styles.ListItem.Render(line)
 }
 
@@ -163,6 +166,7 @@ func (p *SecretsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Data Keys:"))
 		b.WriteString("\n")
+
 		for k, v := range secret.Data {
 			b.WriteString(fmt.Sprintf("  %s: %d bytes\n", k, len(v)))
 		}
@@ -179,8 +183,11 @@ func (p *SecretsPanel) DetailView(width, height int) string {
 func (p *SecretsPanel) Refresh() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		var secrets []corev1.Secret
-		var err error
+
+		var (
+			secrets []corev1.Secret
+			err     error
+		)
 
 		if p.allNs {
 			secrets, err = p.client.ListSecretsAllNamespaces(ctx)
@@ -191,6 +198,7 @@ func (p *SecretsPanel) Refresh() tea.Cmd {
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return secretsLoadedMsg{secrets: secrets}
 	}
 }
@@ -201,12 +209,15 @@ func (p *SecretsPanel) Delete() tea.Cmd {
 	}
 
 	secret := p.filtered[p.cursor]
+
 	return func() tea.Msg {
 		ctx := context.Background()
+
 		err := p.client.DeleteSecret(ctx, secret.Namespace, secret.Name)
 		if err != nil {
 			return ErrorMsg{Error: err}
 		}
+
 		return StatusMsg{Message: fmt.Sprintf("Deleted secret: %s", secret.Name)}
 	}
 }
@@ -215,6 +226,7 @@ func (p *SecretsPanel) SelectedItem() interface{} {
 	if p.cursor >= len(p.filtered) {
 		return nil
 	}
+
 	return &p.filtered[p.cursor]
 }
 
@@ -222,6 +234,7 @@ func (p *SecretsPanel) SelectedName() string {
 	if p.cursor >= len(p.filtered) {
 		return ""
 	}
+
 	return p.filtered[p.cursor].Name
 }
 
@@ -229,11 +242,14 @@ func (p *SecretsPanel) GetSelectedYAML() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	secret := p.filtered[p.cursor]
+
 	data, err := yaml.Marshal(secret)
 	if err != nil {
 		return "", err
 	}
+
 	return string(data), nil
 }
 
@@ -241,16 +257,20 @@ func (p *SecretsPanel) GetSelectedDescribe() (string, error) {
 	if p.cursor >= len(p.filtered) {
 		return "", ErrNoSelection
 	}
+
 	secret := p.filtered[p.cursor]
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Name:         %s\n", secret.Name))
 	b.WriteString(fmt.Sprintf("Namespace:    %s\n", secret.Namespace))
 	b.WriteString(fmt.Sprintf("Type:         %s\n", secret.Type))
-	b.WriteString(fmt.Sprintf("Age:          %s\n", utils.FormatAgeFromMeta(secret.CreationTimestamp)))
+	b.WriteString(
+		fmt.Sprintf("Age:          %s\n", utils.FormatAgeFromMeta(secret.CreationTimestamp)),
+	)
 
 	if len(secret.Labels) > 0 {
 		b.WriteString("\nLabels:\n")
+
 		for k, v := range secret.Labels {
 			b.WriteString(fmt.Sprintf("  %s=%s\n", k, v))
 		}
@@ -258,6 +278,7 @@ func (p *SecretsPanel) GetSelectedDescribe() (string, error) {
 
 	if len(secret.Data) > 0 {
 		b.WriteString("\nData:\n")
+
 		for k, v := range secret.Data {
 			b.WriteString(fmt.Sprintf("  %s: %d bytes\n", k, len(v)))
 		}
@@ -269,6 +290,7 @@ func (p *SecretsPanel) GetSelectedDescribe() (string, error) {
 func (p *SecretsPanel) applyFilter() {
 	if p.filter == "" {
 		p.filtered = p.secrets
+
 		return
 	}
 

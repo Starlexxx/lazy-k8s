@@ -14,12 +14,14 @@ func TestClientSetNamespace(t *testing.T) {
 
 	// Test setting namespace
 	client.SetNamespace("my-namespace")
+
 	if client.namespace != "my-namespace" {
 		t.Errorf("SetNamespace() namespace = %q, want %q", client.namespace, "my-namespace")
 	}
 
 	// Test setting to empty string
 	client.SetNamespace("")
+
 	if client.namespace != "" {
 		t.Errorf("SetNamespace() namespace = %q, want empty string", client.namespace)
 	}
@@ -80,6 +82,7 @@ func TestClientGetContexts(t *testing.T) {
 	for _, ctx := range contexts {
 		contextMap[ctx] = true
 	}
+
 	for _, expected := range []string{"context-1", "context-2", "context-3"} {
 		if !contextMap[expected] {
 			t.Errorf("GetContexts() missing expected context %q", expected)

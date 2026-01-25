@@ -16,7 +16,7 @@ const (
 	PB = TB * 1024
 )
 
-// FormatBytes formats a byte count to a human-readable string
+// FormatBytes formats a byte count to a human-readable string.
 func FormatBytes(bytes int64) string {
 	switch {
 	case bytes >= PB:
@@ -34,7 +34,7 @@ func FormatBytes(bytes int64) string {
 	}
 }
 
-// FormatBytesShort formats bytes with fewer decimal places
+// FormatBytesShort formats bytes with fewer decimal places.
 func FormatBytesShort(bytes int64) string {
 	switch {
 	case bytes >= PB:
@@ -52,38 +52,41 @@ func FormatBytesShort(bytes int64) string {
 	}
 }
 
-// ParseQuantity parses a Kubernetes resource quantity string
+// ParseQuantity parses a Kubernetes resource quantity string.
 func ParseQuantity(s string) (int64, error) {
 	q, err := resource.ParseQuantity(s)
 	if err != nil {
 		return 0, err
 	}
+
 	return q.Value(), nil
 }
 
-// FormatQuantity formats a resource.Quantity to a human-readable string
+// FormatQuantity formats a resource.Quantity to a human-readable string.
 func FormatQuantity(q resource.Quantity) string {
 	return q.String()
 }
 
-// FormatCPU formats CPU quantity (in millicores) to a human-readable string
+// FormatCPU formats CPU quantity (in millicores) to a human-readable string.
 func FormatCPU(millicores int64) string {
 	if millicores >= 1000 {
 		cores := float64(millicores) / 1000
 		if cores == float64(int64(cores)) {
 			return fmt.Sprintf("%d", int64(cores))
 		}
+
 		return fmt.Sprintf("%.1f", cores)
 	}
+
 	return fmt.Sprintf("%dm", millicores)
 }
 
-// FormatMemory formats memory quantity to a human-readable string
+// FormatMemory formats memory quantity to a human-readable string.
 func FormatMemory(bytes int64) string {
 	return FormatBytesShort(bytes)
 }
 
-// ParseCPU parses a CPU string like "100m" or "2" to millicores
+// ParseCPU parses a CPU string like "100m" or "2" to millicores.
 func ParseCPU(s string) (int64, error) {
 	s = strings.TrimSpace(s)
 	if strings.HasSuffix(s, "m") {
@@ -91,6 +94,7 @@ func ParseCPU(s string) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
+
 		return val, nil
 	}
 
@@ -98,33 +102,37 @@ func ParseCPU(s string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	return int64(val * 1000), nil
 }
 
-// ParseMemory parses a memory string like "128Mi" or "1Gi" to bytes
+// ParseMemory parses a memory string like "128Mi" or "1Gi" to bytes.
 func ParseMemory(s string) (int64, error) {
 	q, err := resource.ParseQuantity(s)
 	if err != nil {
 		return 0, err
 	}
+
 	return q.Value(), nil
 }
 
-// FormatPercentage formats a float as a percentage string
+// FormatPercentage formats a float as a percentage string.
 func FormatPercentage(value float64) string {
 	return fmt.Sprintf("%.1f%%", value*100)
 }
 
-// CalculatePercentage calculates percentage of used/total
+// CalculatePercentage calculates percentage of used/total.
 func CalculatePercentage(used, total int64) float64 {
 	if total == 0 {
 		return 0
 	}
+
 	return float64(used) / float64(total)
 }
 
-// FormatResourceUsage formats resource usage as "used/total (percentage)"
+// FormatResourceUsage formats resource usage as "used/total (percentage)".
 func FormatResourceUsage(used, total int64, formatter func(int64) string) string {
 	percentage := CalculatePercentage(used, total) * 100
+
 	return fmt.Sprintf("%s/%s (%.1f%%)", formatter(used), formatter(total), percentage)
 }

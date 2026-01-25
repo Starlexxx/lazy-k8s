@@ -18,6 +18,7 @@ func createTestStyles() *theme.Styles {
 		TextColor:       "#c0caf5",
 		BorderColor:     "#3b4261",
 	}
+
 	return theme.NewStyles(cfg)
 }
 

@@ -12,10 +12,12 @@ func (c *Client) ListSecrets(ctx context.Context, namespace string) ([]corev1.Se
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	list, err := c.clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
@@ -24,6 +26,7 @@ func (c *Client) ListSecretsAllNamespaces(ctx context.Context) ([]corev1.Secret,
 	if err != nil {
 		return nil, err
 	}
+
 	return list.Items, nil
 }
 
@@ -31,6 +34,7 @@ func (c *Client) GetSecret(ctx context.Context, namespace, name string) (*corev1
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
@@ -38,6 +42,7 @@ func (c *Client) WatchSecrets(ctx context.Context, namespace string) (watch.Inte
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().Secrets(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
@@ -45,13 +50,18 @@ func (c *Client) DeleteSecret(ctx context.Context, namespace, name string) error
 	if namespace == "" {
 		namespace = c.namespace
 	}
+
 	return c.clientset.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 func (c *Client) UpdateSecret(ctx context.Context, secret *corev1.Secret) (*corev1.Secret, error) {
-	return c.clientset.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+	return c.clientset.CoreV1().
+		Secrets(secret.Namespace).
+		Update(ctx, secret, metav1.UpdateOptions{})
 }
 
 func (c *Client) CreateSecret(ctx context.Context, secret *corev1.Secret) (*corev1.Secret, error) {
-	return c.clientset.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+	return c.clientset.CoreV1().
+		Secrets(secret.Namespace).
+		Create(ctx, secret, metav1.CreateOptions{})
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/lazyk8s/lazy-k8s/internal/config"
 	"github.com/lazyk8s/lazy-k8s/internal/k8s"
 	"github.com/lazyk8s/lazy-k8s/internal/ui"
@@ -41,6 +42,7 @@ func (a *App) Run() error {
 	)
 
 	_, err := program.Run()
+
 	return err
 }
 
