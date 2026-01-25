@@ -40,7 +40,7 @@ task build
 ### Go Install
 
 ```bash
-go install github.com/lazyk8s/lazy-k8s/cmd/lazy-k8s@latest
+go install github.com/Starlexxx/lazy-k8s/cmd/lazy-k8s@latest
 ```
 
 ## Usage
