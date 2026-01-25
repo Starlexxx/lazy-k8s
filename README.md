@@ -6,7 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/Starlexxx/lazy-k8s)](https://goreportcard.com/report/github.com/Starlexxx/lazy-k8s)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A terminal-based user interface for Kubernetes management, inspired by lazygit.
+A terminal-based user interface for Kubernetes management, inspired by [lazygit](https://github.com/jesseduffield/lazygit).
 
 ## Features
 
