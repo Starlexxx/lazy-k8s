@@ -1,8 +1,6 @@
 module github.com/lazyk8s/lazy-k8s
 
-go 1.23.0
-
-toolchain go1.23.2
+go 1.25.6
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0
