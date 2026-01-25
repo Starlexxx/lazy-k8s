@@ -27,6 +27,9 @@ const (
 	ViewNamespaceSwitch
 )
 
+// borderLines is the number of lines used by panel borders (top + bottom)
+const borderLines = 2
+
 type Model struct {
 	// Core dependencies
 	k8sClient *k8s.Client
@@ -368,18 +371,20 @@ func (m *Model) View() string {
 }
 
 func (m *Model) renderNormalView() string {
-	// Header
 	headerHeight := 1
+	statusBarHeight := 1
+
 	m.header.SetContext(m.k8sClient.CurrentContext())
 	m.header.SetNamespace(m.k8sClient.CurrentNamespace())
 	header := m.header.View(m.width)
 
-	// Status bar
-	statusBarHeight := 1
 	statusBar := m.statusBar.View(m.width)
 
-	// Calculate panel area
-	panelHeight := m.height - headerHeight - statusBarHeight - 2 // borders
+	// Reserve space for header, status bar, and panel borders
+	panelHeight := m.height - headerHeight - statusBarHeight
+	if panelHeight < 3 {
+		panelHeight = 3
+	}
 
 	// Search bar if active
 	searchHeight := 0
@@ -418,9 +423,15 @@ func (m *Model) renderPanels(width, height int) string {
 	rightPanelWidth := width - leftPanelWidth - 1
 
 	// Left side: stacked resource lists
-	var leftPanels []string
-	panelHeight := height / len(m.panels)
+	numPanels := len(m.panels)
+	borderOverhead := numPanels * borderLines
+	availableHeight := height - borderOverhead
+	if availableHeight < numPanels {
+		availableHeight = numPanels
+	}
+	panelHeight := availableHeight / numPanels
 
+	var leftPanels []string
 	for i, panel := range m.panels {
 		panel.SetSize(leftPanelWidth, panelHeight)
 		panel.SetFocused(i == m.activePanelIdx)
@@ -429,8 +440,12 @@ func (m *Model) renderPanels(width, height int) string {
 
 	leftView := lipgloss.JoinVertical(lipgloss.Left, leftPanels...)
 
-	// Right side: detail view of selected item
-	rightView := m.renderDetailView(rightPanelWidth, height)
+	// Right side: detail view
+	detailHeight := height - borderLines
+	if detailHeight < 1 {
+		detailHeight = 1
+	}
+	rightView := m.renderDetailView(rightPanelWidth, detailHeight)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftView, rightView)
 }
