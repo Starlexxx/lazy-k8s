@@ -1,9 +1,9 @@
 # lazy-k8s
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/lazyk8s/lazy-k8s)](https://go.dev/)
-[![CI](https://github.com/lazyk8s/lazy-k8s/actions/workflows/pr.yml/badge.svg)](https://github.com/lazyk8s/lazy-k8s/actions/workflows/pr.yml)
-[![Release](https://github.com/lazyk8s/lazy-k8s/actions/workflows/release.yml/badge.svg)](https://github.com/lazyk8s/lazy-k8s/actions/workflows/release.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/lazyk8s/lazy-k8s)](https://goreportcard.com/report/github.com/lazyk8s/lazy-k8s)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Starlexxx/lazy-k8s)](https://go.dev/)
+[![CI](https://github.com/Starlexxx/lazy-k8s/actions/workflows/pr.yml/badge.svg)](https://github.com/Starlexxx/lazy-k8s/actions/workflows/pr.yml)
+[![Release](https://github.com/Starlexxx/lazy-k8s/actions/workflows/release.yml/badge.svg)](https://github.com/Starlexxx/lazy-k8s/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Starlexxx/lazy-k8s)](https://goreportcard.com/report/github.com/Starlexxx/lazy-k8s)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A terminal-based user interface for Kubernetes management, inspired by lazygit.
