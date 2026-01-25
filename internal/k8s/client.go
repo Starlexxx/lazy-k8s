@@ -11,7 +11,7 @@ import (
 )
 
 type Client struct {
-	clientset   *kubernetes.Clientset
+	clientset   kubernetes.Interface
 	config      clientcmd.ClientConfig
 	restConfig  *rest.Config
 	rawConfig   api.Config
@@ -82,7 +82,7 @@ func (c *Client) CurrentContext() string {
 	return c.contextName
 }
 
-func (c *Client) Clientset() *kubernetes.Clientset {
+func (c *Client) Clientset() kubernetes.Interface {
 	return c.clientset
 }
 
