@@ -28,6 +28,7 @@ func TestViewMode(t *testing.T) {
 		{ViewInput, 5},
 		{ViewContextSwitch, 6},
 		{ViewNamespaceSwitch, 7},
+		{ViewContainerSelect, 8},
 	}
 
 	for _, tt := range tests {

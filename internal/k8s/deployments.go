@@ -2,7 +2,10 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -123,6 +126,78 @@ func (c *Client) UpdateDeployment(
 	return c.clientset.AppsV1().
 		Deployments(deployment.Namespace).
 		Update(ctx, deployment, metav1.UpdateOptions{})
+}
+
+// ErrNoPreviousRevision is returned when there's no previous revision to rollback to.
+var ErrNoPreviousRevision = errors.New("no previous revision found for rollback")
+
+func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string) error {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+
+	deployment, err := c.GetDeployment(ctx, namespace, name)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	rsList, err := c.clientset.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list replica sets: %w", err)
+	}
+
+	var ownedRS []appsv1.ReplicaSet
+
+	for _, rs := range rsList.Items {
+		for _, ownerRef := range rs.OwnerReferences {
+			if ownerRef.Kind == "Deployment" && ownerRef.Name == name {
+				ownedRS = append(ownedRS, rs)
+
+				break
+			}
+		}
+	}
+
+	if len(ownedRS) < 2 {
+		return ErrNoPreviousRevision
+	}
+
+	sort.Slice(ownedRS, func(i, j int) bool {
+		revI := getRevision(&ownedRS[i])
+		revJ := getRevision(&ownedRS[j])
+
+		return revI > revJ
+	})
+
+	previousRS := ownedRS[1]
+	deployment.Spec.Template = previousRS.Spec.Template
+
+	_, err = c.UpdateDeployment(ctx, deployment)
+	if err != nil {
+		return fmt.Errorf("failed to update deployment: %w", err)
+	}
+
+	return nil
+}
+
+func getRevision(rs *appsv1.ReplicaSet) int64 {
+	if rs.Annotations == nil {
+		return 0
+	}
+
+	revStr, ok := rs.Annotations["deployment.kubernetes.io/revision"]
+	if !ok {
+		return 0
+	}
+
+	rev, err := strconv.ParseInt(revStr, 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return rev
 }
 
 func GetDeploymentReadyCount(deployment *appsv1.Deployment) string {

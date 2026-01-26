@@ -36,3 +36,4 @@ dist/
 # Local config
 .env
 .envrc
+FEATURES_TODO.md

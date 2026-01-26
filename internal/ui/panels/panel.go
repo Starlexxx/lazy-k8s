@@ -23,6 +23,33 @@ type StatusMsg struct {
 	Message string
 }
 
+// ScaleRequestMsg is sent when user requests to scale a deployment.
+type ScaleRequestMsg struct {
+	DeploymentName  string
+	Namespace       string
+	CurrentReplicas int32
+}
+
+// RollbackRequestMsg is sent when user requests to rollback a deployment.
+type RollbackRequestMsg struct {
+	DeploymentName string
+	Namespace      string
+}
+
+// PortForwardRequestMsg is sent when user requests to port-forward to a pod.
+type PortForwardRequestMsg struct {
+	PodName   string
+	Namespace string
+	Ports     []int32
+}
+
+// ExecRequestMsg is sent when user requests to exec into a pod.
+type ExecRequestMsg struct {
+	PodName    string
+	Namespace  string
+	Containers []string
+}
+
 // Panel is the interface that all resource panels must implement.
 type Panel interface {
 	// Init initializes the panel and returns initial commands

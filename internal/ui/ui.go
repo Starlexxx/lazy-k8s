@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -15,6 +19,13 @@ import (
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
 
+var (
+	// ErrInvalidReplicaCount is returned when the replica count is invalid.
+	ErrInvalidReplicaCount = errors.New("replica count must be non-negative")
+	// ErrInvalidPortFormat is returned when the port format is invalid.
+	ErrInvalidPortFormat = errors.New("invalid port format, use local:remote or port")
+)
+
 type ViewMode int
 
 const (
@@ -26,6 +37,7 @@ const (
 	ViewInput
 	ViewContextSwitch
 	ViewNamespaceSwitch
+	ViewContainerSelect
 )
 
 // borderLines is the number of lines used by panel borders (top + bottom).
@@ -54,6 +66,10 @@ type Model struct {
 	yamlView  *components.YamlViewer
 	logView   *components.LogViewer
 	search    *components.Search
+	input     *components.Input
+
+	// Input action callback - stores the function to call when input is submitted
+	pendingInputAction func(value string) tea.Cmd
 
 	// State
 	viewMode     ViewMode
@@ -67,6 +83,14 @@ type Model struct {
 	contextList   []string
 	namespaceList []string
 	selectIdx     int
+
+	// Port forwarding
+	portForwards map[string]*k8s.PortForwarder
+
+	// Exec container selection
+	execContainers []string
+	execPodName    string
+	execNamespace  string
 }
 
 func NewModel(client *k8s.Client, cfg *config.Config) *Model {
@@ -74,11 +98,12 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	keys := theme.NewKeyMap()
 
 	m := &Model{
-		k8sClient: client,
-		config:    cfg,
-		styles:    styles,
-		keys:      keys,
-		viewMode:  ViewNormal,
+		k8sClient:    client,
+		config:       cfg,
+		styles:       styles,
+		keys:         keys,
+		viewMode:     ViewNormal,
+		portForwards: make(map[string]*k8s.PortForwarder),
 	}
 
 	// Initialize header and status bar
@@ -89,6 +114,7 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.yamlView = components.NewYamlViewer(styles)
 	m.logView = components.NewLogViewer(styles)
 	m.search = components.NewSearch(styles)
+	m.input = components.NewInput(styles)
 
 	// Initialize panels based on config
 	m.initPanels()
@@ -216,7 +242,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ViewNamespaceSwitch:
 			return m.handleNamespaceSwitch(msg)
 
-		case ViewNormal, ViewInput:
+		case ViewContainerSelect:
+			return m.handleContainerSelect(msg)
+
+		case ViewInput:
+			var cmd tea.Cmd
+
+			m.input, cmd = m.input.Update(msg)
+
+			return m, cmd
+
+		case ViewNormal:
 			// Fall through to normal key handling below
 		}
 
@@ -245,6 +281,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Global keys
 		switch {
 		case key.Matches(msg, m.keys.Quit):
+			m.stopAllPortForwards()
+
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keys.Help):
@@ -364,6 +402,99 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetMessage(m.lastStatus)
 
 		return m, nil
+
+	case components.InputSubmitMsg:
+		m.viewMode = ViewNormal
+		if m.pendingInputAction != nil {
+			action := m.pendingInputAction
+			m.pendingInputAction = nil
+
+			return m, action(msg.Value)
+		}
+
+		return m, nil
+
+	case components.InputCancelMsg:
+		m.viewMode = ViewNormal
+		m.pendingInputAction = nil
+
+		return m, nil
+
+	case panels.ScaleRequestMsg:
+		description := fmt.Sprintf(
+			"Enter new replica count for %s (current: %d)",
+			msg.DeploymentName,
+			msg.CurrentReplicas,
+		)
+		m.showInput(
+			"Scale Deployment",
+			description,
+			strconv.Itoa(int(msg.CurrentReplicas)),
+			func(value string) tea.Cmd {
+				return m.scaleDeployment(msg.Namespace, msg.DeploymentName, value)
+			},
+		)
+		m.input.SetValue(strconv.Itoa(int(msg.CurrentReplicas)))
+
+		return m, nil
+
+	case panels.RollbackRequestMsg:
+		description := fmt.Sprintf(
+			"Are you sure you want to rollback %s to the previous revision?",
+			msg.DeploymentName,
+		)
+		m.confirm.Show(
+			fmt.Sprintf("Rollback %s?", msg.DeploymentName),
+			description,
+			func() tea.Cmd {
+				return m.rollbackDeployment(msg.Namespace, msg.DeploymentName)
+			},
+		)
+		m.viewMode = ViewConfirm
+
+		return m, nil
+
+	case panels.PortForwardRequestMsg:
+		if len(msg.Ports) == 0 {
+			m.statusBar.SetMessage("No ports exposed on this pod")
+
+			return m, nil
+		}
+
+		// Default to first port
+		defaultPort := msg.Ports[0]
+		m.showInput(
+			"Port Forward",
+			fmt.Sprintf("Enter ports as local:remote (e.g., 8080:%d)", defaultPort),
+			fmt.Sprintf("%d:%d", defaultPort, defaultPort),
+			func(value string) tea.Cmd {
+				return m.startPortForward(msg.Namespace, msg.PodName, value)
+			},
+		)
+		m.input.SetValue(fmt.Sprintf("%d:%d", defaultPort, defaultPort))
+
+		return m, nil
+
+	case panels.ExecRequestMsg:
+		if len(msg.Containers) == 0 {
+			m.statusBar.SetError("No containers in this pod")
+
+			return m, nil
+		}
+
+		// Single container - exec directly
+		if len(msg.Containers) == 1 {
+			return m, m.execIntoPod(msg.Namespace, msg.PodName, msg.Containers[0])
+		}
+
+		// Multiple containers - show selection
+		m.execContainers = msg.Containers
+		m.execPodName = msg.PodName
+		m.execNamespace = msg.Namespace
+		m.selectIdx = 0
+		m.viewMode = ViewContainerSelect
+
+		return m, nil
 	}
 
 	// Update active panel
@@ -396,9 +527,14 @@ func (m *Model) View() string {
 		// Overlay confirm dialog
 		confirmView := m.confirm.View()
 		content = m.overlayView(content, confirmView)
-	case ViewContextSwitch, ViewNamespaceSwitch:
+	case ViewContextSwitch, ViewNamespaceSwitch, ViewContainerSelect:
 		content = m.renderSwitchView()
-	case ViewNormal, ViewInput:
+	case ViewInput:
+		content = m.renderNormalView()
+		// Overlay input dialog
+		inputView := m.input.View()
+		content = m.overlayView(content, inputView)
+	case ViewNormal:
 		content = m.renderNormalView()
 	}
 
@@ -416,10 +552,7 @@ func (m *Model) renderNormalView() string {
 	statusBar := m.statusBar.View(m.width)
 
 	// Reserve space for header, status bar, and panel borders
-	panelHeight := m.height - headerHeight - statusBarHeight
-	if panelHeight < 3 {
-		panelHeight = 3
-	}
+	panelHeight := max(m.height-headerHeight-statusBarHeight, 3)
 
 	// Search bar if active
 	var searchView string
@@ -462,10 +595,7 @@ func (m *Model) renderPanels(width, height int) string {
 	numPanels := len(m.panels)
 	borderOverhead := numPanels * borderLines
 
-	availableHeight := height - borderOverhead
-	if availableHeight < numPanels {
-		availableHeight = numPanels
-	}
+	availableHeight := max(height-borderOverhead, numPanels)
 
 	panelHeight := availableHeight / numPanels
 
@@ -480,10 +610,7 @@ func (m *Model) renderPanels(width, height int) string {
 	leftView := lipgloss.JoinVertical(lipgloss.Left, leftPanels...)
 
 	// Right side: detail view
-	detailHeight := height - borderLines
-	if detailHeight < 1 {
-		detailHeight = 1
-	}
+	detailHeight := max(height-borderLines, 1)
 
 	rightView := m.renderDetailView(rightPanelWidth, detailHeight)
 
@@ -510,14 +637,21 @@ func (m *Model) renderSwitchView() string {
 		selectedIdx int
 	)
 
-	if m.viewMode == ViewContextSwitch {
+	switch m.viewMode {
+	case ViewContextSwitch:
 		title = "Switch Context"
 		items = m.contextList
 		selectedIdx = m.selectIdx
-	} else {
+	case ViewNamespaceSwitch:
 		title = "Switch Namespace"
 		items = m.namespaceList
 		selectedIdx = m.selectIdx
+	case ViewContainerSelect:
+		title = "Select Container"
+		items = m.execContainers
+		selectedIdx = m.selectIdx
+	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewConfirm, ViewInput:
+		// These view modes don't use renderSwitchView
 	}
 
 	var b strings.Builder
@@ -543,7 +677,7 @@ func (m *Model) renderSwitchView() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 }
 
-func (m *Model) overlayView(base, overlay string) string {
+func (m *Model) overlayView(_, overlay string) string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, overlay,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(m.styles.Background))
@@ -794,4 +928,150 @@ func (m *Model) showDescribe() (*Model, tea.Cmd) {
 	m.viewMode = ViewYaml
 
 	return m, nil
+}
+
+func (m *Model) showInput(title, description, placeholder string, action func(string) tea.Cmd) {
+	m.input.Show(title, description, placeholder)
+	m.pendingInputAction = action
+	m.viewMode = ViewInput
+}
+
+func (m *Model) scaleDeployment(namespace, name, replicaStr string) tea.Cmd {
+	return func() tea.Msg {
+		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
+		}
+
+		if replicas < 0 {
+			return panels.ErrorMsg{Error: ErrInvalidReplicaCount}
+		}
+
+		ctx := context.Background()
+		if err := m.k8sClient.ScaleDeployment(ctx, namespace, name, int32(replicas)); err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale deployment: %w", err)}
+		}
+
+		return panels.StatusMsg{Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas)}
+	}
+}
+
+func (m *Model) rollbackDeployment(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		if err := m.k8sClient.RollbackDeployment(ctx, namespace, name); err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("failed to rollback deployment: %w", err)}
+		}
+
+		return panels.StatusMsg{Message: fmt.Sprintf("Rolled back %s to previous revision", name)}
+	}
+}
+
+func (m *Model) startPortForward(namespace, podName, portSpec string) tea.Cmd {
+	return func() tea.Msg {
+		var localPort, remotePort int
+
+		_, err := fmt.Sscanf(portSpec, "%d:%d", &localPort, &remotePort)
+		if err != nil {
+			_, err = fmt.Sscanf(portSpec, "%d", &remotePort)
+			if err != nil {
+				return panels.ErrorMsg{Error: ErrInvalidPortFormat}
+			}
+
+			localPort = remotePort
+		}
+
+		stopCh := make(chan struct{})
+		readyCh := make(chan struct{})
+
+		opts := k8s.PortForwardOptions{
+			Namespace:  namespace,
+			PodName:    podName,
+			LocalPort:  localPort,
+			RemotePort: remotePort,
+			StopCh:     stopCh,
+			ReadyCh:    readyCh,
+		}
+
+		pf, err := m.k8sClient.NewPortForwarder(opts)
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("failed to create port forwarder: %w", err)}
+		}
+
+		go func() {
+			_ = pf.Start()
+		}()
+
+		<-readyCh
+
+		key := fmt.Sprintf("%s/%s:%d", namespace, podName, remotePort)
+		m.portForwards[key] = pf
+
+		return panels.StatusMsg{
+			Message: fmt.Sprintf("Port forwarding %d -> %s:%d", localPort, podName, remotePort),
+		}
+	}
+}
+
+func (m *Model) stopAllPortForwards() {
+	for key, pf := range m.portForwards {
+		pf.Stop()
+		delete(m.portForwards, key)
+	}
+}
+
+func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if m.selectIdx > 0 {
+			m.selectIdx--
+		}
+	case "down", "j":
+		if m.selectIdx < len(m.execContainers)-1 {
+			m.selectIdx++
+		}
+	case "enter":
+		if m.selectIdx < len(m.execContainers) {
+			container := m.execContainers[m.selectIdx]
+			m.viewMode = ViewNormal
+
+			return m, m.execIntoPod(m.execNamespace, m.execPodName, container)
+		}
+
+		m.viewMode = ViewNormal
+	case "esc":
+		m.viewMode = ViewNormal
+	}
+
+	return m, nil
+}
+
+func (m *Model) execIntoPod(namespace, podName, container string) tea.Cmd {
+	args := []string{
+		"exec", "-it",
+		"-n", namespace,
+		podName,
+		"-c", container,
+		"--", "/bin/sh", "-c",
+		"if command -v bash > /dev/null; then exec bash; else exec sh; fi",
+	}
+
+	c := tea.ExecProcess(
+		newKubectlCmd(args...),
+		func(err error) tea.Msg {
+			if err != nil {
+				return panels.ErrorMsg{Error: fmt.Errorf("exec failed: %w", err)}
+			}
+
+			return panels.StatusMsg{
+				Message: fmt.Sprintf("Exited shell in %s/%s", podName, container),
+			}
+		},
+	)
+
+	return c
+}
+
+func newKubectlCmd(args ...string) *exec.Cmd {
+	return exec.Command("kubectl", args...) //nolint:noctx
 }
