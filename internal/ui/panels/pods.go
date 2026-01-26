@@ -50,6 +50,47 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 			p.MoveToTop()
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			p.MoveToBottom(len(p.filtered))
+		case key.Matches(msg, key.NewBinding(key.WithKeys("p"))):
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			pod := p.filtered[p.cursor]
+
+			var ports []int32
+
+			for _, container := range pod.Spec.Containers {
+				for _, port := range container.Ports {
+					ports = append(ports, port.ContainerPort)
+				}
+			}
+
+			return p, func() tea.Msg {
+				return PortForwardRequestMsg{
+					PodName:   pod.Name,
+					Namespace: pod.Namespace,
+					Ports:     ports,
+				}
+			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("x"))):
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			pod := p.filtered[p.cursor]
+
+			var containers []string
+			for _, container := range pod.Spec.Containers {
+				containers = append(containers, container.Name)
+			}
+
+			return p, func() tea.Msg {
+				return ExecRequestMsg{
+					PodName:    pod.Name,
+					Namespace:  pod.Namespace,
+					Containers: containers,
+				}
+			}
 		}
 
 	case podsLoadedMsg:
@@ -236,7 +277,7 @@ func (p *PodsPanel) DetailView(width, height int) string {
 
 	// Key hints
 	b.WriteString("\n")
-	b.WriteString(p.styles.Muted.Render("[l]ogs [x]exec [d]escribe [y]aml [D]elete"))
+	b.WriteString(p.styles.Muted.Render("[l]ogs [x]exec [p]ort-forward [d]escribe [y]aml [D]elete"))
 
 	return b.String()
 }

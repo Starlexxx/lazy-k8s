@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -297,6 +298,220 @@ func TestGetDeploymentReadyCount(t *testing.T) {
 			result := GetDeploymentReadyCount(tt.deployment)
 			if result != tt.expected {
 				t.Errorf("GetDeploymentReadyCount() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRollbackDeployment(t *testing.T) {
+	// Create deployment with selector
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+			UID:       "deploy-uid",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(3),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "nginx:1.20"},
+					},
+				},
+			},
+		},
+	}
+
+	// Create current ReplicaSet (revision 2)
+	currentRS := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment-abc123",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "2",
+			},
+			Labels: map[string]string{"app": "test"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind: "Deployment",
+					Name: "test-deployment",
+					UID:  "deploy-uid",
+				},
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "nginx:1.20"},
+					},
+				},
+			},
+		},
+	}
+
+	// Create previous ReplicaSet (revision 1)
+	previousRS := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment-def456",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+			},
+			Labels: map[string]string{"app": "test"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind: "Deployment",
+					Name: "test-deployment",
+					UID:  "deploy-uid",
+				},
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "nginx:1.19"},
+					},
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset(deployment, currentRS, previousRS)
+	client := createTestClient(clientset)
+	ctx := context.Background()
+
+	// Execute rollback
+	err := client.RollbackDeployment(ctx, "default", "test-deployment")
+	if err != nil {
+		t.Fatalf("RollbackDeployment returned unexpected error: %v", err)
+	}
+
+	// Verify the deployment was updated with previous template
+	updatedDeploy, err := client.GetDeployment(ctx, "default", "test-deployment")
+	if err != nil {
+		t.Fatalf("GetDeployment returned unexpected error: %v", err)
+	}
+
+	// The image should be rolled back to the previous version
+	if len(updatedDeploy.Spec.Template.Spec.Containers) == 0 {
+		t.Fatal("Deployment should have containers")
+	}
+
+	if updatedDeploy.Spec.Template.Spec.Containers[0].Image != "nginx:1.19" {
+		t.Errorf(
+			"Deployment image = %q, want %q",
+			updatedDeploy.Spec.Template.Spec.Containers[0].Image,
+			"nginx:1.19",
+		)
+	}
+}
+
+func TestRollbackDeploymentNoPreviousRevision(t *testing.T) {
+	// Create deployment with only one ReplicaSet
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+		},
+	}
+
+	// Only one ReplicaSet
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment-abc123",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+			},
+			Labels: map[string]string{"app": "test"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind: "Deployment",
+					Name: "test-deployment",
+				},
+			},
+		},
+	}
+
+	clientset := fake.NewSimpleClientset(deployment, rs)
+	client := createTestClient(clientset)
+	ctx := context.Background()
+
+	err := client.RollbackDeployment(ctx, "default", "test-deployment")
+	if err == nil {
+		t.Error("RollbackDeployment should return error when no previous revision exists")
+	}
+
+	if !errors.Is(err, ErrNoPreviousRevision) {
+		t.Errorf("RollbackDeployment error = %v, want ErrNoPreviousRevision", err)
+	}
+}
+
+func TestGetRevision(t *testing.T) {
+	tests := []struct {
+		name     string
+		rs       *appsv1.ReplicaSet
+		expected int64
+	}{
+		{
+			name: "valid revision",
+			rs: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "5",
+					},
+				},
+			},
+			expected: 5,
+		},
+		{
+			name: "no annotations",
+			rs: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expected: 0,
+		},
+		{
+			name: "missing revision annotation",
+			rs: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"other-annotation": "value",
+					},
+				},
+			},
+			expected: 0,
+		},
+		{
+			name: "invalid revision value",
+			rs: &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"deployment.kubernetes.io/revision": "invalid",
+					},
+				},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getRevision(tt.rs)
+			if result != tt.expected {
+				t.Errorf("getRevision() = %d, want %d", result, tt.expected)
 			}
 		})
 	}

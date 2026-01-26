@@ -51,11 +51,39 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			p.MoveToBottom(len(p.filtered))
 		case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
-			// Scale - would open input dialog
-			return p, nil
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			deploy := p.filtered[p.cursor]
+
+			replicas := int32(0)
+			if deploy.Spec.Replicas != nil {
+				replicas = *deploy.Spec.Replicas
+			}
+
+			return p, func() tea.Msg {
+				return ScaleRequestMsg{
+					DeploymentName:  deploy.Name,
+					Namespace:       deploy.Namespace,
+					CurrentReplicas: replicas,
+				}
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			// Restart
 			return p, p.restartDeployment()
+		case key.Matches(msg, key.NewBinding(key.WithKeys("R"))):
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			deploy := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return RollbackRequestMsg{
+					DeploymentName: deploy.Name,
+					Namespace:      deploy.Namespace,
+				}
+			}
 		}
 
 	case deploymentsLoadedMsg:
@@ -216,7 +244,7 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 
 	// Key hints
 	b.WriteString("\n")
-	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [d]escribe [y]aml [D]elete"))
+	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [R]ollback [d]escribe [y]aml [D]elete"))
 
 	return b.String()
 }

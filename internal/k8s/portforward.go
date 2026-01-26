@@ -18,7 +18,7 @@ type PortForwardOptions struct {
 	PodName    string
 	LocalPort  int
 	RemotePort int
-	StopCh     <-chan struct{}
+	StopCh     chan struct{}
 	ReadyCh    chan struct{}
 }
 
@@ -82,4 +82,22 @@ func (pf *PortForwarder) GetPorts() ([]portforward.ForwardedPort, error) {
 	}
 
 	return pf.pf.GetPorts()
+}
+
+func (pf *PortForwarder) Stop() {
+	if pf.options.StopCh != nil {
+		close(pf.options.StopCh)
+	}
+}
+
+func (pf *PortForwarder) LocalPort() int {
+	return pf.options.LocalPort
+}
+
+func (pf *PortForwarder) RemotePort() int {
+	return pf.options.RemotePort
+}
+
+func (pf *PortForwarder) PodName() string {
+	return pf.options.PodName
 }
