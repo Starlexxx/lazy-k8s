@@ -50,6 +50,27 @@ type ExecRequestMsg struct {
 	Containers []string
 }
 
+// ScaleStatefulSetRequestMsg is sent when user requests to scale a statefulset.
+type ScaleStatefulSetRequestMsg struct {
+	StatefulSetName string
+	Namespace       string
+	CurrentReplicas int32
+}
+
+// EditHPAMinReplicasRequestMsg is sent when user requests to edit HPA min replicas.
+type EditHPAMinReplicasRequestMsg struct {
+	HPAName     string
+	Namespace   string
+	MinReplicas int32
+}
+
+// EditHPAMaxReplicasRequestMsg is sent when user requests to edit HPA max replicas.
+type EditHPAMaxReplicasRequestMsg struct {
+	HPAName     string
+	Namespace   string
+	MaxReplicas int32
+}
+
 // Panel is the interface that all resource panels must implement.
 type Panel interface {
 	// Init initializes the panel and returns initial commands

@@ -24,6 +24,10 @@ var (
 	ErrInvalidReplicaCount = errors.New("replica count must be non-negative")
 	// ErrInvalidPortFormat is returned when the port format is invalid.
 	ErrInvalidPortFormat = errors.New("invalid port format, use local:remote or port")
+	// ErrMinReplicasTooLow is returned when min replicas is less than 1.
+	ErrMinReplicasTooLow = errors.New("min replicas must be at least 1")
+	// ErrMaxReplicasTooLow is returned when max replicas is less than 1.
+	ErrMaxReplicasTooLow = errors.New("max replicas must be at least 1")
 )
 
 type ViewMode int
@@ -151,6 +155,18 @@ func (m *Model) initPanels() {
 			m.panels = append(m.panels, panels.NewPVPanel(m.k8sClient, m.styles))
 		case "pvc", "persistentvolumeclaims":
 			m.panels = append(m.panels, panels.NewPVCPanel(m.k8sClient, m.styles))
+		case "statefulsets", "sts":
+			m.panels = append(m.panels, panels.NewStatefulSetsPanel(m.k8sClient, m.styles))
+		case "daemonsets", "ds":
+			m.panels = append(m.panels, panels.NewDaemonSetsPanel(m.k8sClient, m.styles))
+		case "cronjobs", "cj":
+			m.panels = append(m.panels, panels.NewCronJobsPanel(m.k8sClient, m.styles))
+		case "hpa", "horizontalpodautoscalers":
+			m.panels = append(m.panels, panels.NewHPAPanel(m.k8sClient, m.styles))
+		case "networkpolicies", "netpol":
+			m.panels = append(m.panels, panels.NewNetworkPoliciesPanel(m.k8sClient, m.styles))
+		case "serviceaccounts", "sa":
+			m.panels = append(m.panels, panels.NewServiceAccountsPanel(m.k8sClient, m.styles))
 		}
 	}
 
@@ -493,6 +509,60 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.execNamespace = msg.Namespace
 		m.selectIdx = 0
 		m.viewMode = ViewContainerSelect
+
+		return m, nil
+
+	case panels.ScaleStatefulSetRequestMsg:
+		description := fmt.Sprintf(
+			"Enter new replica count for %s (current: %d)",
+			msg.StatefulSetName,
+			msg.CurrentReplicas,
+		)
+		m.showInput(
+			"Scale StatefulSet",
+			description,
+			strconv.Itoa(int(msg.CurrentReplicas)),
+			func(value string) tea.Cmd {
+				return m.scaleStatefulSet(msg.Namespace, msg.StatefulSetName, value)
+			},
+		)
+		m.input.SetValue(strconv.Itoa(int(msg.CurrentReplicas)))
+
+		return m, nil
+
+	case panels.EditHPAMinReplicasRequestMsg:
+		description := fmt.Sprintf(
+			"Enter new minimum replicas for %s (current: %d)",
+			msg.HPAName,
+			msg.MinReplicas,
+		)
+		m.showInput(
+			"Edit HPA Min Replicas",
+			description,
+			strconv.Itoa(int(msg.MinReplicas)),
+			func(value string) tea.Cmd {
+				return m.updateHPAMinReplicas(msg.Namespace, msg.HPAName, value)
+			},
+		)
+		m.input.SetValue(strconv.Itoa(int(msg.MinReplicas)))
+
+		return m, nil
+
+	case panels.EditHPAMaxReplicasRequestMsg:
+		description := fmt.Sprintf(
+			"Enter new maximum replicas for %s (current: %d)",
+			msg.HPAName,
+			msg.MaxReplicas,
+		)
+		m.showInput(
+			"Edit HPA Max Replicas",
+			description,
+			strconv.Itoa(int(msg.MaxReplicas)),
+			func(value string) tea.Cmd {
+				return m.updateHPAMaxReplicas(msg.Namespace, msg.HPAName, value)
+			},
+		)
+		m.input.SetValue(strconv.Itoa(int(msg.MaxReplicas)))
 
 		return m, nil
 	}
@@ -964,6 +1034,78 @@ func (m *Model) rollbackDeployment(namespace, name string) tea.Cmd {
 		}
 
 		return panels.StatusMsg{Message: fmt.Sprintf("Rolled back %s to previous revision", name)}
+	}
+}
+
+func (m *Model) scaleStatefulSet(namespace, name, replicaStr string) tea.Cmd {
+	return func() tea.Msg {
+		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
+		}
+
+		if replicas < 0 {
+			return panels.ErrorMsg{Error: ErrInvalidReplicaCount}
+		}
+
+		ctx := context.Background()
+		if err := m.k8sClient.ScaleStatefulSet(ctx, namespace, name, int32(replicas)); err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale statefulset: %w", err)}
+		}
+
+		return panels.StatusMsg{Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas)}
+	}
+}
+
+func (m *Model) updateHPAMinReplicas(namespace, name, replicaStr string) tea.Cmd {
+	return func() tea.Msg {
+		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
+		}
+
+		if replicas < 1 {
+			return panels.ErrorMsg{Error: ErrMinReplicasTooLow}
+		}
+
+		ctx := context.Background()
+
+		err = m.k8sClient.UpdateHPAMinReplicas(ctx, namespace, name, int32(replicas))
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to update HPA min replicas: %w", err),
+			}
+		}
+
+		return panels.StatusMsg{
+			Message: fmt.Sprintf("Updated %s min replicas to %d", name, replicas),
+		}
+	}
+}
+
+func (m *Model) updateHPAMaxReplicas(namespace, name, replicaStr string) tea.Cmd {
+	return func() tea.Msg {
+		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
+		}
+
+		if replicas < 1 {
+			return panels.ErrorMsg{Error: ErrMaxReplicasTooLow}
+		}
+
+		ctx := context.Background()
+
+		err = m.k8sClient.UpdateHPAMaxReplicas(ctx, namespace, name, int32(replicas))
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to update HPA max replicas: %w", err),
+			}
+		}
+
+		return panels.StatusMsg{
+			Message: fmt.Sprintf("Updated %s max replicas to %d", name, replicas),
+		}
 	}
 }
 
