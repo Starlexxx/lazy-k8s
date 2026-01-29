@@ -329,14 +329,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.startNamespaceSwitch()
 
 		case key.Matches(msg, m.keys.Refresh):
-			if len(m.panels) > m.activePanelIdx {
-				return m, m.panels[m.activePanelIdx].Refresh()
-			}
+			return m, m.refreshAllPanels()
 
 		case key.Matches(msg, m.keys.AllNamespace):
 			m.showAllNs = !m.showAllNs
 			m.statusBar.SetMessage(fmt.Sprintf("All namespaces: %v", m.showAllNs))
-			// Refresh all panels
+
 			for _, panel := range m.panels {
 				panel.SetAllNamespaces(m.showAllNs)
 				cmds = append(cmds, panel.Refresh())
@@ -395,7 +393,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case panels.RefreshMsg:
-		// Refresh the specified panel
 		for i, panel := range m.panels {
 			if panel.Title() == msg.PanelName {
 				newPanel, cmd := panel.Update(msg)
@@ -418,6 +415,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetMessage(m.lastStatus)
 
 		return m, nil
+
+	case panels.RefreshAllPanelsMsg:
+		return m, m.refreshAllPanels()
+
+	case panels.StatusWithRefreshMsg:
+		m.lastStatus = msg.Message
+		m.statusBar.SetMessage(m.lastStatus)
+
+		return m, m.refreshAllPanels()
 
 	case components.InputSubmitMsg:
 		m.viewMode = ViewNormal
@@ -477,7 +483,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Default to first port
 		defaultPort := msg.Ports[0]
 		m.showInput(
 			"Port Forward",
@@ -1025,7 +1030,10 @@ func (m *Model) scaleDeployment(namespace, name, replicaStr string) tea.Cmd {
 			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale deployment: %w", err)}
 		}
 
-		return panels.StatusMsg{Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas)}
+		// Return status with refresh to show updated pods
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas),
+		}
 	}
 }
 
@@ -1036,7 +1044,9 @@ func (m *Model) rollbackDeployment(namespace, name string) tea.Cmd {
 			return panels.ErrorMsg{Error: fmt.Errorf("failed to rollback deployment: %w", err)}
 		}
 
-		return panels.StatusMsg{Message: fmt.Sprintf("Rolled back %s to previous revision", name)}
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Rolled back %s to previous revision", name),
+		}
 	}
 }
 
@@ -1056,7 +1066,9 @@ func (m *Model) scaleStatefulSet(namespace, name, replicaStr string) tea.Cmd {
 			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale statefulset: %w", err)}
 		}
 
-		return panels.StatusMsg{Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas)}
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas),
+		}
 	}
 }
 
@@ -1080,7 +1092,7 @@ func (m *Model) updateHPAMinReplicas(namespace, name, replicaStr string) tea.Cmd
 			}
 		}
 
-		return panels.StatusMsg{
+		return panels.StatusWithRefreshMsg{
 			Message: fmt.Sprintf("Updated %s min replicas to %d", name, replicas),
 		}
 	}
@@ -1106,7 +1118,7 @@ func (m *Model) updateHPAMaxReplicas(namespace, name, replicaStr string) tea.Cmd
 			}
 		}
 
-		return panels.StatusMsg{
+		return panels.StatusWithRefreshMsg{
 			Message: fmt.Sprintf("Updated %s max replicas to %d", name, replicas),
 		}
 	}
@@ -1163,6 +1175,18 @@ func (m *Model) stopAllPortForwards() {
 		pf.Stop()
 		delete(m.portForwards, key)
 	}
+}
+
+func (m *Model) refreshAllPanels() tea.Cmd {
+	var cmds []tea.Cmd
+
+	for _, panel := range m.panels {
+		cmds = append(cmds, panel.Refresh())
+	}
+
+	m.statusBar.SetMessage("Refreshed all panels")
+
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {

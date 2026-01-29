@@ -23,6 +23,16 @@ type StatusMsg struct {
 	Message string
 }
 
+// RefreshAllPanelsMsg is sent to trigger a refresh of all panels.
+// Used after mutating operations like scale, restart, etc.
+type RefreshAllPanelsMsg struct{}
+
+// StatusWithRefreshMsg combines a status message with a refresh signal.
+// When processed, it displays the status and triggers a full refresh.
+type StatusWithRefreshMsg struct {
+	Message string
+}
+
 // ScaleRequestMsg is sent when user requests to scale a deployment.
 type ScaleRequestMsg struct {
 	DeploymentName  string
