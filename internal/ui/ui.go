@@ -632,12 +632,12 @@ func (m *Model) renderNormalView() string {
 	// Reserve space for header, status bar, and panel borders
 	panelHeight := max(m.height-headerHeight-statusBarHeight, 3)
 
-	// Search bar if active
+	// Search bar if active (takes 1 line + newline = 2 lines total)
 	var searchView string
 
 	if m.searchActive {
 		searchView = m.search.View(m.width)
-		panelHeight--
+		panelHeight -= 2
 	}
 
 	// Render panels

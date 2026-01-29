@@ -3,6 +3,7 @@ package components
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -10,17 +11,33 @@ import (
 )
 
 type YamlViewer struct {
-	styles  *theme.Styles
-	content string
-	lines   []string
-	offset  int
-	width   int
-	height  int
+	styles       *theme.Styles
+	content      string
+	lines        []string
+	offset       int
+	width        int
+	height       int
+	searchActive bool
+	searchInput  textinput.Model
+	searchQuery  string
+	matchLines   []int // indices of lines that match search
+	matchIndex   int   // current match index
 }
 
 func NewYamlViewer(styles *theme.Styles) *YamlViewer {
+	ti := textinput.New()
+	ti.Placeholder = "search..."
+	ti.CharLimit = 100
+	ti.Width = 30
+	ti.Prompt = "/ "
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(styles.Primary)
+	ti.TextStyle = lipgloss.NewStyle().Foreground(styles.Text)
+	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(styles.MutedColor)
+
 	return &YamlViewer{
-		styles: styles,
+		styles:      styles,
+		searchInput: ti,
+		matchLines:  make([]int, 0),
 	}
 }
 
@@ -33,7 +50,59 @@ func (y *YamlViewer) SetContent(content string) {
 func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle search mode
+		if y.searchActive {
+			switch msg.String() {
+			case "esc":
+				y.searchActive = false
+				y.searchInput.Blur()
+
+				return y, nil
+			case "enter":
+				y.searchActive = false
+				y.searchInput.Blur()
+				y.performSearch()
+				// Jump to first match
+				if len(y.matchLines) > 0 {
+					y.matchIndex = 0
+					y.offset = y.matchLines[0]
+				}
+
+				return y, nil
+			default:
+				var cmd tea.Cmd
+
+				y.searchInput, cmd = y.searchInput.Update(msg)
+				y.searchQuery = y.searchInput.Value()
+
+				return y, cmd
+			}
+		}
+
+		// Normal mode
 		switch msg.String() {
+		case "/":
+			y.searchActive = true
+			y.searchInput.Focus()
+			y.searchInput.SetValue("")
+
+			return y, nil
+		case "n":
+			// Next match
+			if len(y.matchLines) > 0 {
+				y.matchIndex = (y.matchIndex + 1) % len(y.matchLines)
+				y.offset = y.matchLines[y.matchIndex]
+			}
+		case "N":
+			// Previous match
+			if len(y.matchLines) > 0 {
+				y.matchIndex--
+				if y.matchIndex < 0 {
+					y.matchIndex = len(y.matchLines) - 1
+				}
+
+				y.offset = y.matchLines[y.matchIndex]
+			}
 		case "up", "k":
 			if y.offset > 0 {
 				y.offset--
@@ -77,6 +146,22 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 	return y, nil
 }
 
+func (y *YamlViewer) performSearch() {
+	y.matchLines = make([]int, 0)
+
+	if y.searchQuery == "" {
+		return
+	}
+
+	query := strings.ToLower(y.searchQuery)
+
+	for i, line := range y.lines {
+		if strings.Contains(strings.ToLower(line), query) {
+			y.matchLines = append(y.matchLines, i)
+		}
+	}
+}
+
 func (y *YamlViewer) View(width, height int) string {
 	y.width = width
 	y.height = height
@@ -85,15 +170,45 @@ func (y *YamlViewer) View(width, height int) string {
 
 	// Title bar
 	title := y.styles.ModalTitle.Render("YAML Viewer")
-	hint := y.styles.Muted.Render("↑/↓ scroll • g/G top/bottom • esc close")
+
+	var hint string
+	if y.searchActive {
+		hint = y.styles.Muted.Render("enter search • esc cancel")
+	} else {
+		hint = y.styles.Muted.Render("/ search • n/N next/prev • ↑/↓ scroll • esc close")
+	}
+
 	titleBar := lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", hint)
 	b.WriteString(titleBar)
 	b.WriteString("\n")
+
+	// Search bar if active
+	if y.searchActive {
+		y.searchInput.Width = width - 10
+		b.WriteString(y.searchInput.View())
+		b.WriteString("\n")
+	} else if y.searchQuery != "" && len(y.matchLines) > 0 {
+		// Show match count
+		matchInfo := y.styles.StatusValue.Render(
+			lipgloss.NewStyle().Foreground(y.styles.Primary).Render(
+				" [" + y.searchQuery + "] " +
+					string(rune('0'+y.matchIndex+1)) + "/" +
+					string(rune('0'+len(y.matchLines))) + " matches",
+			),
+		)
+		b.WriteString(matchInfo)
+		b.WriteString("\n")
+	}
+
 	b.WriteString(strings.Repeat("─", width-4))
 	b.WriteString("\n")
 
 	// Content area
-	visibleHeight := height - 6
+	visibleHeight := height - 7
+	if y.searchActive || (y.searchQuery != "" && len(y.matchLines) > 0) {
+		visibleHeight--
+	}
+
 	if visibleHeight < 1 {
 		visibleHeight = 1
 	}
@@ -103,10 +218,25 @@ func (y *YamlViewer) View(width, height int) string {
 		endIdx = len(y.lines)
 	}
 
-	// Syntax highlighting for YAML
+	// Syntax highlighting for YAML with search highlight
 	for i := y.offset; i < endIdx; i++ {
 		line := y.lines[i]
 		highlighted := y.highlightLine(line, width-6)
+
+		// Highlight search matches
+		searchMatch := y.searchQuery != "" &&
+			strings.Contains(strings.ToLower(line), strings.ToLower(y.searchQuery))
+		if searchMatch {
+			// Mark as match line
+			if y.isCurrentMatch(i) {
+				highlighted = y.styles.ListItemFocused.Render("► " + highlighted)
+			} else {
+				highlighted = lipgloss.NewStyle().
+					Background(lipgloss.Color("#3d4966")).
+					Render(highlighted)
+			}
+		}
+
 		b.WriteString(highlighted)
 		b.WriteString("\n")
 	}
@@ -126,6 +256,14 @@ func (y *YamlViewer) View(width, height int) string {
 		Width(width - 4).
 		Height(height - 2).
 		Render(b.String())
+}
+
+func (y *YamlViewer) isCurrentMatch(lineIdx int) bool {
+	if len(y.matchLines) == 0 || y.matchIndex >= len(y.matchLines) {
+		return false
+	}
+
+	return y.matchLines[y.matchIndex] == lineIdx
 }
 
 func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
