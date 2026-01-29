@@ -567,12 +567,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Update active panel
-	if len(m.panels) > m.activePanelIdx {
-		panel, cmd := m.panels[m.activePanelIdx].Update(msg)
-		m.panels[m.activePanelIdx] = panel
+	// Update ALL panels so they can process their respective loaded messages
+	// (e.g., podsLoadedMsg, deploymentsLoadedMsg) after namespace/context switch
+	for i := range m.panels {
+		panel, cmd := m.panels[i].Update(msg)
+		m.panels[i] = panel
 
-		cmds = append(cmds, cmd)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return m, tea.Batch(cmds...)
