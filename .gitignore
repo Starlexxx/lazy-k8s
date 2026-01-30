@@ -36,4 +36,7 @@ dist/
 # Local config
 .env
 .envrc
-FEATURES_TODO.md
+
+# Markdown files in root (except README)
+/*.md
+!README.md
