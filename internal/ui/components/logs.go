@@ -110,7 +110,6 @@ func (l *LogViewer) Stop() {
 func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle search mode
 		if l.searchActive {
 			switch msg.String() {
 			case "esc":
@@ -122,7 +121,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 				l.searchActive = false
 				l.searchInput.Blur()
 				l.performSearch()
-				// Jump to first match
+
 				if len(l.matchLines) > 0 {
 					l.matchIndex = 0
 					l.offset = l.matchLines[0]
@@ -140,7 +139,6 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			}
 		}
 
-		// Normal mode
 		switch msg.String() {
 		case "/":
 			l.searchActive = true
@@ -149,14 +147,12 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 
 			return l, nil
 		case "n":
-			// Next match
 			if len(l.matchLines) > 0 {
 				l.matchIndex = (l.matchIndex + 1) % len(l.matchLines)
 				l.offset = l.matchLines[l.matchIndex]
 				l.follow = false
 			}
 		case "N":
-			// Previous match
 			if len(l.matchLines) > 0 {
 				l.matchIndex--
 				if l.matchIndex < 0 {
@@ -315,13 +311,11 @@ func (l *LogViewer) View(width, height int) string {
 	b.WriteString(titleBar)
 	b.WriteString("\n")
 
-	// Search bar if active
 	if l.searchActive {
 		l.searchInput.Width = width - 10
 		b.WriteString(l.searchInput.View())
 		b.WriteString("\n")
 	} else if l.searchQuery != "" && len(l.matchLines) > 0 {
-		// Show match count
 		matchInfo := lipgloss.NewStyle().Foreground(l.styles.Primary).Render(
 			" [" + l.searchQuery + "] " +
 				string(rune('0'+l.matchIndex+1)) + "/" +
@@ -334,7 +328,6 @@ func (l *LogViewer) View(width, height int) string {
 	b.WriteString(strings.Repeat("─", width-4))
 	b.WriteString("\n")
 
-	// Content area
 	visibleHeight := height - 7
 	if l.searchActive || (l.searchQuery != "" && len(l.matchLines) > 0) {
 		visibleHeight--
@@ -359,12 +352,12 @@ func (l *LogViewer) View(width, height int) string {
 		if len(line) > width-6 {
 			line = line[:width-9] + "..."
 		}
-		// Basic log highlighting
+
 		highlighted := l.highlightLogLine(line)
 
-		// Highlight search matches
 		searchMatch := l.searchQuery != "" &&
 			strings.Contains(strings.ToLower(l.lines[i]), strings.ToLower(l.searchQuery))
+
 		if searchMatch {
 			if l.isCurrentMatch(i) {
 				highlighted = l.styles.ListItemFocused.Render("► " + highlighted)

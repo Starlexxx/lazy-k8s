@@ -20,8 +20,8 @@ type YamlViewer struct {
 	searchActive bool
 	searchInput  textinput.Model
 	searchQuery  string
-	matchLines   []int // indices of lines that match search
-	matchIndex   int   // current match index
+	matchLines   []int
+	matchIndex   int
 }
 
 func NewYamlViewer(styles *theme.Styles) *YamlViewer {
@@ -50,7 +50,6 @@ func (y *YamlViewer) SetContent(content string) {
 func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle search mode
 		if y.searchActive {
 			switch msg.String() {
 			case "esc":
@@ -62,7 +61,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 				y.searchActive = false
 				y.searchInput.Blur()
 				y.performSearch()
-				// Jump to first match
+
 				if len(y.matchLines) > 0 {
 					y.matchIndex = 0
 					y.offset = y.matchLines[0]
@@ -79,7 +78,6 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 			}
 		}
 
-		// Normal mode
 		switch msg.String() {
 		case "/":
 			y.searchActive = true
@@ -88,13 +86,11 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 
 			return y, nil
 		case "n":
-			// Next match
 			if len(y.matchLines) > 0 {
 				y.matchIndex = (y.matchIndex + 1) % len(y.matchLines)
 				y.offset = y.matchLines[y.matchIndex]
 			}
 		case "N":
-			// Previous match
 			if len(y.matchLines) > 0 {
 				y.matchIndex--
 				if y.matchIndex < 0 {
@@ -168,7 +164,6 @@ func (y *YamlViewer) View(width, height int) string {
 
 	var b strings.Builder
 
-	// Title bar
 	title := y.styles.ModalTitle.Render("YAML Viewer")
 
 	var hint string
@@ -182,13 +177,11 @@ func (y *YamlViewer) View(width, height int) string {
 	b.WriteString(titleBar)
 	b.WriteString("\n")
 
-	// Search bar if active
 	if y.searchActive {
 		y.searchInput.Width = width - 10
 		b.WriteString(y.searchInput.View())
 		b.WriteString("\n")
 	} else if y.searchQuery != "" && len(y.matchLines) > 0 {
-		// Show match count
 		matchInfo := y.styles.StatusValue.Render(
 			lipgloss.NewStyle().Foreground(y.styles.Primary).Render(
 				" [" + y.searchQuery + "] " +
@@ -203,7 +196,6 @@ func (y *YamlViewer) View(width, height int) string {
 	b.WriteString(strings.Repeat("─", width-4))
 	b.WriteString("\n")
 
-	// Content area
 	visibleHeight := height - 7
 	if y.searchActive || (y.searchQuery != "" && len(y.matchLines) > 0) {
 		visibleHeight--
@@ -218,16 +210,13 @@ func (y *YamlViewer) View(width, height int) string {
 		endIdx = len(y.lines)
 	}
 
-	// Syntax highlighting for YAML with search highlight
 	for i := y.offset; i < endIdx; i++ {
 		line := y.lines[i]
 		highlighted := y.highlightLine(line, width-6)
-
-		// Highlight search matches
 		searchMatch := y.searchQuery != "" &&
 			strings.Contains(strings.ToLower(line), strings.ToLower(y.searchQuery))
+
 		if searchMatch {
-			// Mark as match line
 			if y.isCurrentMatch(i) {
 				highlighted = y.styles.ListItemFocused.Render("► " + highlighted)
 			} else {
@@ -241,7 +230,6 @@ func (y *YamlViewer) View(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Scroll indicator
 	if len(y.lines) > visibleHeight {
 		scrollPos := float64(y.offset) / float64(len(y.lines)-visibleHeight)
 		indicator := strings.Repeat("─", int(float64(width-10)*scrollPos))
@@ -271,7 +259,6 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 		line = line[:maxWidth-3] + "..."
 	}
 
-	// Simple YAML syntax highlighting
 	keyStyle := lipgloss.NewStyle().Foreground(y.styles.Primary)
 	valueStyle := lipgloss.NewStyle().Foreground(y.styles.Text)
 	stringStyle := lipgloss.NewStyle().Foreground(y.styles.Secondary)
@@ -280,12 +267,10 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 	trimmed := strings.TrimLeft(line, " ")
 	indent := strings.Repeat(" ", len(line)-len(trimmed))
 
-	// Comment
 	if strings.HasPrefix(trimmed, "#") {
 		return commentStyle.Render(line)
 	}
 
-	// Key: value
 	if colonIdx := strings.Index(trimmed, ":"); colonIdx > 0 {
 		key := trimmed[:colonIdx]
 		rest := trimmed[colonIdx:]
@@ -301,7 +286,6 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 			value = value[1:]
 		}
 
-		// String value (quoted)
 		if strings.HasPrefix(value, "\"") || strings.HasPrefix(value, "'") {
 			return indent + keyStyle.Render(
 				key,
@@ -315,7 +299,6 @@ func (y *YamlViewer) highlightLine(line string, maxWidth int) string {
 		return indent + keyStyle.Render(key) + valueStyle.Render(": "+value)
 	}
 
-	// List item
 	if strings.HasPrefix(trimmed, "- ") {
 		return indent + valueStyle.Render("- ") + valueStyle.Render(trimmed[2:])
 	}
