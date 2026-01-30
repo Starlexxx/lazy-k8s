@@ -230,11 +230,25 @@ func (y *YamlViewer) View(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	if len(y.lines) > visibleHeight {
+	if len(y.lines) > visibleHeight && width > 12 {
 		scrollPos := float64(y.offset) / float64(len(y.lines)-visibleHeight)
-		indicator := strings.Repeat("─", int(float64(width-10)*scrollPos))
-		indicator += "█"
-		indicator += strings.Repeat("─", width-10-len(indicator))
+		barWidth := width - 10
+		leftWidth := int(float64(barWidth) * scrollPos)
+
+		if leftWidth < 0 {
+			leftWidth = 0
+		}
+
+		if leftWidth > barWidth {
+			leftWidth = barWidth
+		}
+
+		rightWidth := barWidth - leftWidth - 1
+		if rightWidth < 0 {
+			rightWidth = 0
+		}
+
+		indicator := strings.Repeat("─", leftWidth) + "█" + strings.Repeat("─", rightWidth)
 
 		b.WriteString("\n")
 		b.WriteString(y.styles.Muted.Render(indicator))
