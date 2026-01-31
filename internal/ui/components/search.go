@@ -3,7 +3,6 @@ package components
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
 )
@@ -15,14 +14,10 @@ type Search struct {
 
 func NewSearch(styles *theme.Styles) *Search {
 	ti := textinput.New()
-	ti.Placeholder = "type to filter..."
+	ti.Placeholder = "Search..."
 	ti.CharLimit = 100
-	ti.Width = 50
+	ti.Width = 30
 	ti.Prompt = "/ "
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(styles.Primary)
-	ti.TextStyle = lipgloss.NewStyle().Foreground(styles.Text)
-	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(styles.MutedColor)
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(styles.Primary)
 
 	return &Search{
 		styles: styles,
@@ -59,12 +54,7 @@ func (s *Search) Update(msg tea.Msg) (*Search, tea.Cmd) {
 }
 
 func (s *Search) View(width int) string {
-	s.input.Width = width - 6
+	s.input.Width = width - 10
 
-	// Simple inline style without border
-	return lipgloss.NewStyle().
-		Foreground(s.styles.Text).
-		Padding(0, 1).
-		Width(width - 2).
-		Render(s.input.View())
+	return s.styles.Input.Width(width - 4).Render(s.input.View())
 }

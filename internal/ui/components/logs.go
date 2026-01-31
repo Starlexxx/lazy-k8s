@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -19,41 +18,25 @@ type LogLineMsg struct {
 }
 
 type LogViewer struct {
-	styles       *theme.Styles
-	lines        []string
-	offset       int
-	width        int
-	height       int
-	follow       bool
-	pod          string
-	namespace    string
-	container    string
-	cancel       context.CancelFunc
-	maxLines     int
-	searchActive bool
-	searchInput  textinput.Model
-	searchQuery  string
-	matchLines   []int
-	matchIndex   int
+	styles    *theme.Styles
+	lines     []string
+	offset    int
+	width     int
+	height    int
+	follow    bool
+	pod       string
+	namespace string
+	container string
+	cancel    context.CancelFunc
+	maxLines  int
 }
 
 func NewLogViewer(styles *theme.Styles) *LogViewer {
-	ti := textinput.New()
-	ti.Placeholder = "search..."
-	ti.CharLimit = 100
-	ti.Width = 30
-	ti.Prompt = "/ "
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(styles.Primary)
-	ti.TextStyle = lipgloss.NewStyle().Foreground(styles.Text)
-	ti.PlaceholderStyle = lipgloss.NewStyle().Foreground(styles.MutedColor)
-
 	return &LogViewer{
-		styles:      styles,
-		lines:       make([]string, 0),
-		follow:      true,
-		maxLines:    10000,
-		searchInput: ti,
-		matchLines:  make([]int, 0),
+		styles:   styles,
+		lines:    make([]string, 0),
+		follow:   true,
+		maxLines: 10000,
 	}
 }
 
@@ -110,58 +93,7 @@ func (l *LogViewer) Stop() {
 func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if l.searchActive {
-			switch msg.String() {
-			case "esc":
-				l.searchActive = false
-				l.searchInput.Blur()
-
-				return l, nil
-			case "enter":
-				l.searchActive = false
-				l.searchInput.Blur()
-				l.performSearch()
-
-				if len(l.matchLines) > 0 {
-					l.matchIndex = 0
-					l.offset = l.matchLines[0]
-					l.follow = false
-				}
-
-				return l, nil
-			default:
-				var cmd tea.Cmd
-
-				l.searchInput, cmd = l.searchInput.Update(msg)
-				l.searchQuery = l.searchInput.Value()
-
-				return l, cmd
-			}
-		}
-
 		switch msg.String() {
-		case "/":
-			l.searchActive = true
-			l.searchInput.Focus()
-			l.searchInput.SetValue("")
-
-			return l, nil
-		case "n":
-			if len(l.matchLines) > 0 {
-				l.matchIndex = (l.matchIndex + 1) % len(l.matchLines)
-				l.offset = l.matchLines[l.matchIndex]
-				l.follow = false
-			}
-		case "N":
-			if len(l.matchLines) > 0 {
-				l.matchIndex--
-				if l.matchIndex < 0 {
-					l.matchIndex = len(l.matchLines) - 1
-				}
-
-				l.offset = l.matchLines[l.matchIndex]
-				l.follow = false
-			}
 		case "up", "k":
 			if l.offset > 0 {
 				l.offset--
@@ -262,30 +194,6 @@ func (l *LogViewer) tickCmd() tea.Cmd {
 	})
 }
 
-func (l *LogViewer) performSearch() {
-	l.matchLines = make([]int, 0)
-
-	if l.searchQuery == "" {
-		return
-	}
-
-	query := strings.ToLower(l.searchQuery)
-
-	for i, line := range l.lines {
-		if strings.Contains(strings.ToLower(line), query) {
-			l.matchLines = append(l.matchLines, i)
-		}
-	}
-}
-
-func (l *LogViewer) isCurrentMatch(lineIdx int) bool {
-	if len(l.matchLines) == 0 || l.matchIndex >= len(l.matchLines) {
-		return false
-	}
-
-	return l.matchLines[l.matchIndex] == lineIdx
-}
-
 func (l *LogViewer) View(width, height int) string {
 	l.width = width
 	l.height = height
@@ -300,39 +208,15 @@ func (l *LogViewer) View(width, height int) string {
 		followIndicator = l.styles.StatusSuccess.Render(" [FOLLOW]")
 	}
 
-	var hint string
-	if l.searchActive {
-		hint = l.styles.Muted.Render("enter search • esc cancel")
-	} else {
-		hint = l.styles.Muted.Render("/ search • n/N next/prev • f follow • esc close")
-	}
-
+	hint := l.styles.Muted.Render("↑/↓ scroll • f follow • g/G top/bottom • esc close")
 	titleBar := lipgloss.JoinHorizontal(lipgloss.Center, title, followIndicator, "  ", hint)
 	b.WriteString(titleBar)
 	b.WriteString("\n")
-
-	if l.searchActive {
-		l.searchInput.Width = width - 10
-		b.WriteString(l.searchInput.View())
-		b.WriteString("\n")
-	} else if l.searchQuery != "" && len(l.matchLines) > 0 {
-		matchInfo := lipgloss.NewStyle().Foreground(l.styles.Primary).Render(
-			" [" + l.searchQuery + "] " +
-				string(rune('0'+l.matchIndex+1)) + "/" +
-				string(rune('0'+len(l.matchLines))) + " matches",
-		)
-		b.WriteString(matchInfo)
-		b.WriteString("\n")
-	}
-
 	b.WriteString(strings.Repeat("─", width-4))
 	b.WriteString("\n")
 
-	visibleHeight := height - 7
-	if l.searchActive || (l.searchQuery != "" && len(l.matchLines) > 0) {
-		visibleHeight--
-	}
-
+	// Content area
+	visibleHeight := height - 6
 	if visibleHeight < 1 {
 		visibleHeight = 1
 	}
@@ -352,22 +236,8 @@ func (l *LogViewer) View(width, height int) string {
 		if len(line) > width-6 {
 			line = line[:width-9] + "..."
 		}
-
+		// Basic log highlighting
 		highlighted := l.highlightLogLine(line)
-
-		searchMatch := l.searchQuery != "" &&
-			strings.Contains(strings.ToLower(l.lines[i]), strings.ToLower(l.searchQuery))
-
-		if searchMatch {
-			if l.isCurrentMatch(i) {
-				highlighted = l.styles.ListItemFocused.Render("► " + highlighted)
-			} else {
-				highlighted = lipgloss.NewStyle().
-					Background(lipgloss.Color("#3d4966")).
-					Render(highlighted)
-			}
-		}
-
 		b.WriteString(highlighted)
 		b.WriteString("\n")
 	}
