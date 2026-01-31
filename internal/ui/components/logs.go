@@ -377,16 +377,22 @@ func (l *LogViewer) View(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Line count
-	lineInfo := l.styles.Muted.Render(
-		lipgloss.NewStyle().Align(lipgloss.Right).Width(width - 8).
-			Render(strings.Repeat("─", width-30) + " " +
-				l.styles.StatusValue.Render(
-					strings.TrimSpace(strings.Repeat(" ", 10)+
-						"Lines: "+string(rune('0'+len(l.lines)%10))),
-				)),
-	)
-	b.WriteString(lineInfo)
+	if width > 40 {
+		separatorWidth := width - 30
+		if separatorWidth < 0 {
+			separatorWidth = 0
+		}
+
+		lineInfo := l.styles.Muted.Render(
+			lipgloss.NewStyle().Align(lipgloss.Right).Width(width - 8).
+				Render(strings.Repeat("─", separatorWidth) + " " +
+					l.styles.StatusValue.Render(
+						strings.TrimSpace(strings.Repeat(" ", 10)+
+							"Lines: "+string(rune('0'+len(l.lines)%10))),
+					)),
+		)
+		b.WriteString(lineInfo)
+	}
 
 	return l.styles.Modal.
 		Width(width - 4).
