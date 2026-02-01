@@ -45,6 +45,7 @@ type KeyMap struct {
 	Restart      key.Binding
 	Rollback     key.Binding
 	Copy         key.Binding
+	CopyName     key.Binding
 	Context      key.Binding
 	Namespace    key.Binding
 	AllNamespace key.Binding
@@ -171,9 +172,13 @@ func NewKeyMap() *KeyMap {
 			key.WithKeys("ctrl+y"),
 			key.WithHelp("ctrl+y", "copy yaml"),
 		),
-		Context: key.NewBinding(
+		CopyName: key.NewBinding(
 			key.WithKeys("c"),
-			key.WithHelp("c", "switch context"),
+			key.WithHelp("c", "copy name"),
+		),
+		Context: key.NewBinding(
+			key.WithKeys("K"),
+			key.WithHelp("K", "switch context"),
 		),
 		Namespace: key.NewBinding(
 			key.WithKeys("n"),
@@ -203,7 +208,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Enter, k.Back, k.Search, k.Refresh},
 		{k.Describe, k.Yaml, k.Logs, k.Exec},
 		{k.Delete, k.Scale, k.Restart, k.PortForward},
-		{k.Context, k.Namespace, k.Copy, k.Help},
-		{k.Quit},
+		{k.Context, k.Namespace, k.CopyName, k.Copy},
+		{k.Help, k.Quit},
 	}
 }

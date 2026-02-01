@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -374,6 +375,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Describe):
 			return m.showDescribe()
+
+		case key.Matches(msg, m.keys.CopyName):
+			return m.copyNameToClipboard()
+
+		case key.Matches(msg, m.keys.Copy):
+			return m.copyYamlToClipboard()
 
 		default:
 			// Pass to active panel
@@ -1239,6 +1246,56 @@ func (m *Model) execIntoPod(namespace, podName, container string) tea.Cmd {
 	)
 
 	return c
+}
+
+func (m *Model) copyNameToClipboard() (*Model, tea.Cmd) {
+	if len(m.panels) == 0 || m.activePanelIdx >= len(m.panels) {
+		return m, nil
+	}
+
+	activePanel := m.panels[m.activePanelIdx]
+	name := activePanel.SelectedName()
+
+	if name == "" {
+		m.statusBar.SetMessage("No resource selected")
+
+		return m, nil
+	}
+
+	if err := clipboard.WriteAll(name); err != nil {
+		m.statusBar.SetError(fmt.Sprintf("Failed to copy: %v", err))
+
+		return m, nil
+	}
+
+	m.statusBar.SetMessage(fmt.Sprintf("Copied '%s' to clipboard", name))
+
+	return m, nil
+}
+
+func (m *Model) copyYamlToClipboard() (*Model, tea.Cmd) {
+	if len(m.panels) == 0 || m.activePanelIdx >= len(m.panels) {
+		return m, nil
+	}
+
+	activePanel := m.panels[m.activePanelIdx]
+
+	yamlContent, err := activePanel.GetSelectedYAML()
+	if err != nil {
+		m.statusBar.SetError(fmt.Sprintf("Failed to get YAML: %v", err))
+
+		return m, nil
+	}
+
+	if err := clipboard.WriteAll(yamlContent); err != nil {
+		m.statusBar.SetError(fmt.Sprintf("Failed to copy: %v", err))
+
+		return m, nil
+	}
+
+	m.statusBar.SetMessage("Copied YAML to clipboard")
+
+	return m, nil
 }
 
 func newKubectlCmd(args ...string) *exec.Cmd {
