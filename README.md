@@ -8,6 +8,8 @@
 
 A terminal-based user interface for Kubernetes management, inspired by [lazygit](https://github.com/jesseduffield/lazygit).
 
+![lazy-k8s demo](assets/demo.gif)
+
 ## Features
 
 - **Multi-panel layout** with keyboard-driven navigation
@@ -83,7 +85,7 @@ lazy-k8s -n kube-system
 | `q` / `Ctrl+c` | Quit |
 | `/` | Search/filter |
 | `Ctrl+r` | Refresh |
-| `c` | Switch context |
+| `K` | Switch context |
 | `n` | Switch namespace |
 | `A` | Toggle all namespaces |
 
@@ -95,7 +97,8 @@ lazy-k8s -n kube-system
 | `y` | View YAML |
 | `e` | Edit resource |
 | `D` | Delete (with confirm) |
-| `Ctrl+y` | Copy YAML |
+| `c` | Copy resource name |
+| `Ctrl+y` | Copy YAML to clipboard |
 
 ### Pod Actions
 
