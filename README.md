@@ -95,7 +95,7 @@ lazy-k8s -n kube-system
 |-----|--------|
 | `d` | Describe resource |
 | `y` | View YAML |
-| `e` | Edit resource |
+| `e` | Edit resource (opens $EDITOR) |
 | `D` | Delete (with confirm) |
 | `c` | Copy resource name |
 | `Ctrl+y` | Copy YAML to clipboard |

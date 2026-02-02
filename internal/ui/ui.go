@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -29,6 +30,8 @@ var (
 	ErrMinReplicasTooLow = errors.New("min replicas must be at least 1")
 	// ErrMaxReplicasTooLow is returned when max replicas is less than 1.
 	ErrMaxReplicasTooLow = errors.New("max replicas must be at least 1")
+	// ErrApplyFailed is returned when kubectl apply fails.
+	ErrApplyFailed = errors.New("kubectl apply failed")
 )
 
 type ViewMode int
@@ -381,6 +384,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Copy):
 			return m.copyYamlToClipboard()
+
+		case key.Matches(msg, m.keys.Edit):
+			return m.editResource()
 
 		default:
 			// Pass to active panel
@@ -1296,6 +1302,95 @@ func (m *Model) copyYamlToClipboard() (*Model, tea.Cmd) {
 	m.statusBar.SetMessage("Copied YAML to clipboard")
 
 	return m, nil
+}
+
+func (m *Model) editResource() (*Model, tea.Cmd) {
+	if len(m.panels) == 0 || m.activePanelIdx >= len(m.panels) {
+		return m, nil
+	}
+
+	activePanel := m.panels[m.activePanelIdx]
+	name := activePanel.SelectedName()
+
+	if name == "" {
+		m.statusBar.SetMessage("No resource selected")
+
+		return m, nil
+	}
+
+	yamlContent, err := activePanel.GetSelectedYAML()
+	if err != nil {
+		m.statusBar.SetError(fmt.Sprintf("Failed to get YAML: %v", err))
+
+		return m, nil
+	}
+
+	// Create temp file for editing
+	tmpDir := os.TempDir()
+
+	f, err := os.CreateTemp(tmpDir, fmt.Sprintf("lazy-k8s-%s-*.yaml", name))
+	if err != nil {
+		m.statusBar.SetError(fmt.Sprintf("Failed to create temp file: %v", err))
+
+		return m, nil
+	}
+
+	tmpFile := f.Name()
+
+	if _, err := f.WriteString(yamlContent); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmpFile)
+
+		m.statusBar.SetError(fmt.Sprintf("Failed to write temp file: %v", err))
+
+		return m, nil
+	}
+
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmpFile)
+
+		m.statusBar.SetError(fmt.Sprintf("Failed to close temp file: %v", err))
+
+		return m, nil
+	}
+
+	// Get editor from environment, fall back to vim
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+
+	if editor == "" {
+		editor = "vim"
+	}
+
+	// Spawn editor process
+	cmd := exec.Command(editor, tmpFile) //nolint:gosec,noctx
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		defer func() { _ = os.Remove(tmpFile) }()
+
+		if err != nil {
+			return panels.ErrorMsg{Error: fmt.Errorf("editor failed: %w", err)}
+		}
+
+		// Apply the edited YAML using kubectl
+		applyCmd := exec.Command("kubectl", "apply", "-f", tmpFile) //nolint:gosec,noctx
+
+		output, err := applyCmd.CombinedOutput()
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("%w: %s", ErrApplyFailed, strings.TrimSpace(string(output))),
+			}
+		}
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Applied changes to %s", name),
+		}
+	})
 }
 
 func newKubectlCmd(args ...string) *exec.Cmd {
