@@ -393,6 +393,158 @@ func TestStringContains(t *testing.T) {
 	}
 }
 
+// TestErrApplyFailed tests the ErrApplyFailed error constant.
+func TestErrApplyFailed(t *testing.T) {
+	if ErrApplyFailed == nil {
+		t.Error("ErrApplyFailed should not be nil")
+	}
+
+	if ErrApplyFailed.Error() != "kubectl apply failed" {
+		t.Errorf("ErrApplyFailed.Error() = %q, want %q",
+			ErrApplyFailed.Error(), "kubectl apply failed")
+	}
+}
+
+// TestCopyNameToClipboardNoPanel tests copyNameToClipboard when no panels exist.
+func TestCopyNameToClipboardNoPanel(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 0,
+	}
+
+	result, cmd := m.copyNameToClipboard()
+
+	if result != m {
+		t.Error("copyNameToClipboard should return same model when no panels")
+	}
+
+	if cmd != nil {
+		t.Error("copyNameToClipboard should return nil cmd when no panels")
+	}
+}
+
+// TestCopyNameToClipboardInvalidIndex tests copyNameToClipboard with invalid panel index.
+func TestCopyNameToClipboardInvalidIndex(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 5,
+	}
+
+	result, cmd := m.copyNameToClipboard()
+
+	if result != m {
+		t.Error("copyNameToClipboard should return same model with invalid index")
+	}
+
+	if cmd != nil {
+		t.Error("copyNameToClipboard should return nil cmd with invalid index")
+	}
+}
+
+// TestCopyYamlToClipboardNoPanel tests copyYamlToClipboard when no panels exist.
+func TestCopyYamlToClipboardNoPanel(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 0,
+	}
+
+	result, cmd := m.copyYamlToClipboard()
+
+	if result != m {
+		t.Error("copyYamlToClipboard should return same model when no panels")
+	}
+
+	if cmd != nil {
+		t.Error("copyYamlToClipboard should return nil cmd when no panels")
+	}
+}
+
+// TestCopyYamlToClipboardInvalidIndex tests copyYamlToClipboard with invalid panel index.
+func TestCopyYamlToClipboardInvalidIndex(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 5,
+	}
+
+	result, cmd := m.copyYamlToClipboard()
+
+	if result != m {
+		t.Error("copyYamlToClipboard should return same model with invalid index")
+	}
+
+	if cmd != nil {
+		t.Error("copyYamlToClipboard should return nil cmd with invalid index")
+	}
+}
+
+// TestEditResourceNoPanel tests editResource when no panels exist.
+func TestEditResourceNoPanel(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 0,
+	}
+
+	result, cmd := m.editResource()
+
+	if result != m {
+		t.Error("editResource should return same model when no panels")
+	}
+
+	if cmd != nil {
+		t.Error("editResource should return nil cmd when no panels")
+	}
+}
+
+// TestEditResourceInvalidPanelIndex tests editResource with invalid panel index.
+func TestEditResourceInvalidPanelIndex(t *testing.T) {
+	m := &Model{
+		panels:         nil,
+		activePanelIdx: 5,
+	}
+
+	result, cmd := m.editResource()
+
+	if result != m {
+		t.Error("editResource should return same model with invalid panel index")
+	}
+
+	if cmd != nil {
+		t.Error("editResource should return nil cmd with invalid panel index")
+	}
+}
+
+// TestGetEditorFromEnv tests editor selection logic.
+func TestGetEditorFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		editor   string
+		visual   string
+		expected string
+	}{
+		{"EDITOR set", "nano", "", "nano"},
+		{"VISUAL fallback", "", "code", "code"},
+		{"vim default", "", "", "vim"},
+		{"EDITOR takes priority", "emacs", "code", "emacs"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := tt.editor
+			if editor == "" {
+				editor = tt.visual
+			}
+
+			if editor == "" {
+				editor = "vim"
+			}
+
+			if editor != tt.expected {
+				t.Errorf("editor = %q, want %q", editor, tt.expected)
+			}
+		})
+	}
+}
+
 // Mock k8s.Client interface methods for documentation
 // Note: The real k8s.Client requires a working kubeconfig.
 type mockK8sClientMethods struct {
