@@ -749,13 +749,56 @@ func (m *Model) renderSwitchView() string {
 	b.WriteString(m.styles.ModalTitle.Render(title))
 	b.WriteString("\n\n")
 
-	for i, item := range items {
+	// Calculate visible area - reserve space for title, footer, and padding
+	maxVisibleItems := m.height - 10
+	if maxVisibleItems < 5 {
+		maxVisibleItems = 5
+	}
+
+	// Calculate scroll window to keep selected item visible
+	startIdx := 0
+	endIdx := len(items)
+
+	if len(items) > maxVisibleItems {
+		// Center the selected item in the visible area when possible
+		halfVisible := maxVisibleItems / 2
+		startIdx = selectedIdx - halfVisible
+
+		if startIdx < 0 {
+			startIdx = 0
+		}
+
+		endIdx = startIdx + maxVisibleItems
+		if endIdx > len(items) {
+			endIdx = len(items)
+			startIdx = endIdx - maxVisibleItems
+
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+	}
+
+	// Show scroll indicator if there are items above
+	if startIdx > 0 {
+		b.WriteString(m.styles.Muted.Render(fmt.Sprintf("  ↑ %d more above", startIdx)))
+		b.WriteString("\n")
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		item := items[i]
 		if i == selectedIdx {
 			b.WriteString(m.styles.ListItemFocused.Render("> " + item))
 		} else {
 			b.WriteString(m.styles.ListItem.Render("  " + item))
 		}
 
+		b.WriteString("\n")
+	}
+
+	// Show scroll indicator if there are items below
+	if endIdx < len(items) {
+		b.WriteString(m.styles.Muted.Render(fmt.Sprintf("  ↓ %d more below", len(items)-endIdx)))
 		b.WriteString("\n")
 	}
 

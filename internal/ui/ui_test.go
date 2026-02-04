@@ -227,6 +227,107 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	}
 }
 
+// TestSwitchViewScrolling tests the scroll window calculation for long lists.
+func TestSwitchViewScrolling(t *testing.T) {
+	tests := []struct {
+		name          string
+		itemCount     int
+		maxVisible    int
+		selectedIdx   int
+		expectedStart int
+		expectedEnd   int
+		hasItemsAbove bool
+		hasItemsBelow bool
+	}{
+		{
+			name:          "small list fits entirely",
+			itemCount:     5,
+			maxVisible:    10,
+			selectedIdx:   2,
+			expectedStart: 0,
+			expectedEnd:   5,
+			hasItemsAbove: false,
+			hasItemsBelow: false,
+		},
+		{
+			name:          "large list selection at top",
+			itemCount:     20,
+			maxVisible:    10,
+			selectedIdx:   0,
+			expectedStart: 0,
+			expectedEnd:   10,
+			hasItemsAbove: false,
+			hasItemsBelow: true,
+		},
+		{
+			name:          "large list selection at bottom",
+			itemCount:     20,
+			maxVisible:    10,
+			selectedIdx:   19,
+			expectedStart: 10,
+			expectedEnd:   20,
+			hasItemsAbove: true,
+			hasItemsBelow: false,
+		},
+		{
+			name:          "large list selection in middle",
+			itemCount:     20,
+			maxVisible:    10,
+			selectedIdx:   10,
+			expectedStart: 5,
+			expectedEnd:   15,
+			hasItemsAbove: true,
+			hasItemsBelow: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the scroll calculation from renderSwitchView
+			startIdx := 0
+			endIdx := tt.itemCount
+
+			if tt.itemCount > tt.maxVisible {
+				halfVisible := tt.maxVisible / 2
+				startIdx = tt.selectedIdx - halfVisible
+
+				if startIdx < 0 {
+					startIdx = 0
+				}
+
+				endIdx = startIdx + tt.maxVisible
+				if endIdx > tt.itemCount {
+					endIdx = tt.itemCount
+					startIdx = endIdx - tt.maxVisible
+
+					if startIdx < 0 {
+						startIdx = 0
+					}
+				}
+			}
+
+			if startIdx != tt.expectedStart {
+				t.Errorf("startIdx = %d, want %d", startIdx, tt.expectedStart)
+			}
+
+			if endIdx != tt.expectedEnd {
+				t.Errorf("endIdx = %d, want %d", endIdx, tt.expectedEnd)
+			}
+
+			hasAbove := startIdx > 0
+			hasBelow := endIdx < tt.itemCount
+
+			if hasAbove != tt.hasItemsAbove {
+				t.Errorf("hasItemsAbove = %v, want %v", hasAbove, tt.hasItemsAbove)
+			}
+
+			if hasBelow != tt.hasItemsBelow {
+				t.Errorf("hasItemsBelow = %v, want %v", hasBelow, tt.hasItemsBelow)
+			}
+		})
+	}
+}
+
 // TestPanelNavigationLogic tests panel navigation logic.
 func TestPanelNavigationLogic(t *testing.T) {
 	numPanels := 4
