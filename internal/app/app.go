@@ -21,7 +21,6 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// Set namespace from config if specified
 	if cfg.Namespace != "" {
 		client.SetNamespace(cfg.Namespace)
 	}

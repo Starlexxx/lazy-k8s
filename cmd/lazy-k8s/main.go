@@ -30,7 +30,6 @@ keyboard-driven interface for common Kubernetes operations.`,
 				return fmt.Errorf("failed to load config: %w", err)
 			}
 
-			// Override config with CLI flags
 			if kubeconfig != "" {
 				cfg.Kubeconfig = kubeconfig
 			}
@@ -52,7 +51,6 @@ keyboard-driven interface for common Kubernetes operations.`,
 		},
 	}
 
-	// Global flags
 	rootCmd.Flags().StringP("kubeconfig", "k", "", "Path to kubeconfig file")
 	rootCmd.Flags().StringP("context", "c", "", "Kubernetes context to use")
 	rootCmd.Flags().StringP("namespace", "n", "", "Kubernetes namespace to use")

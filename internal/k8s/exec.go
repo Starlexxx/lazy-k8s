@@ -53,7 +53,6 @@ func (c *Client) Exec(opts ExecOptions) error {
 }
 
 func (c *Client) GetContainerShell(namespace, podName, container string) []string {
-	// Try common shells in order of preference
 	shells := [][]string{
 		{"/bin/bash"},
 		{"/bin/sh"},

@@ -86,7 +86,6 @@ func (h *Help) View(width, height int) string {
 		},
 	}
 
-	// Render in two columns
 	keyStyle := h.styles.StatusKey
 	descStyle := h.styles.StatusValue
 	sectionStyle := lipgloss.NewStyle().

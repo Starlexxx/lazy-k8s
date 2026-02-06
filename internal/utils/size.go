@@ -16,7 +16,6 @@ const (
 	PB = TB * 1024
 )
 
-// FormatBytes formats a byte count to a human-readable string.
 func FormatBytes(bytes int64) string {
 	switch {
 	case bytes >= PB:
@@ -34,7 +33,6 @@ func FormatBytes(bytes int64) string {
 	}
 }
 
-// FormatBytesShort formats bytes with fewer decimal places.
 func FormatBytesShort(bytes int64) string {
 	switch {
 	case bytes >= PB:
@@ -52,7 +50,6 @@ func FormatBytesShort(bytes int64) string {
 	}
 }
 
-// ParseQuantity parses a Kubernetes resource quantity string.
 func ParseQuantity(s string) (int64, error) {
 	q, err := resource.ParseQuantity(s)
 	if err != nil {
@@ -62,12 +59,12 @@ func ParseQuantity(s string) (int64, error) {
 	return q.Value(), nil
 }
 
-// FormatQuantity formats a resource.Quantity to a human-readable string.
 func FormatQuantity(q resource.Quantity) string {
 	return q.String()
 }
 
-// FormatCPU formats CPU quantity (in millicores) to a human-readable string.
+// FormatCPU converts millicores: values >= 1000m display as cores
+// (e.g., "1.5"), otherwise as millicores (e.g., "100m").
 func FormatCPU(millicores int64) string {
 	if millicores >= 1000 {
 		cores := float64(millicores) / 1000
@@ -81,7 +78,6 @@ func FormatCPU(millicores int64) string {
 	return fmt.Sprintf("%dm", millicores)
 }
 
-// FormatMemory formats memory quantity to a human-readable string.
 func FormatMemory(bytes int64) string {
 	return FormatBytesShort(bytes)
 }
@@ -116,12 +112,10 @@ func ParseMemory(s string) (int64, error) {
 	return q.Value(), nil
 }
 
-// FormatPercentage formats a float as a percentage string.
 func FormatPercentage(value float64) string {
 	return fmt.Sprintf("%.1f%%", value*100)
 }
 
-// CalculatePercentage calculates percentage of used/total.
 func CalculatePercentage(used, total int64) float64 {
 	if total == 0 {
 		return 0

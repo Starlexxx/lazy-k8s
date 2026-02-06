@@ -104,7 +104,6 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *DeploymentsPanel) View() string {
 	var b strings.Builder
 
-	// Title
 	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
@@ -114,7 +113,6 @@ func (p *DeploymentsPanel) View() string {
 
 	b.WriteString("\n")
 
-	// Calculate visible items
 	visibleHeight := p.height - 3
 	if visibleHeight < 1 {
 		visibleHeight = 1
@@ -158,7 +156,6 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 
 	line = utils.PadRight(line, p.width-10)
 
-	// Color based on ready state
 	readyStyle := p.styles.StatusRunning
 	if deploy.Status.ReadyReplicas < *deploy.Spec.Replicas {
 		readyStyle = p.styles.StatusPending
@@ -186,7 +183,6 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Deployment: " + deploy.Name))
 	b.WriteString("\n\n")
 
-	// Basic info
 	b.WriteString(p.styles.DetailLabel.Render("Ready:"))
 	b.WriteString(p.styles.DetailValue.Render(k8s.GetDeploymentReadyCount(&deploy)))
 	b.WriteString("\n")
@@ -214,7 +210,6 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(string(deploy.Spec.Strategy.Type)))
 	b.WriteString("\n")
 
-	// Images
 	images := k8s.GetDeploymentImages(&deploy)
 	if len(images) > 0 {
 		b.WriteString("\n")
@@ -226,7 +221,6 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Conditions
 	if len(deploy.Status.Conditions) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Conditions:"))
@@ -242,7 +236,6 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Key hints
 	b.WriteString("\n")
 	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [R]ollback [d]escribe [y]aml [D]elete"))
 

@@ -160,7 +160,6 @@ func (p *PVCPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Requested
 	if pvc.Spec.Resources.Requests != nil {
 		requested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 
@@ -201,7 +200,6 @@ func (p *PVCPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Conditions
 	if len(pvc.Status.Conditions) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Conditions:"))

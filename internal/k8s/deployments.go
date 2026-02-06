@@ -104,7 +104,8 @@ func (c *Client) RestartDeployment(ctx context.Context, namespace, name string) 
 		namespace = c.namespace
 	}
 
-	// Patch deployment with a restart annotation
+	// Kubernetes has no native restart API; a timestamp annotation forces the
+	// deployment controller to perform a rolling update (matches kubectl rollout restart).
 	patch := []byte(
 		fmt.Sprintf(
 			`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`,
@@ -128,7 +129,6 @@ func (c *Client) UpdateDeployment(
 		Update(ctx, deployment, metav1.UpdateOptions{})
 }
 
-// ErrNoPreviousRevision is returned when there's no previous revision to rollback to.
 var ErrNoPreviousRevision = errors.New("no previous revision found for rollback")
 
 func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string) error {

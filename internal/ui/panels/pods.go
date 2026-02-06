@@ -21,6 +21,7 @@ type PodsPanel struct {
 	styles   *theme.Styles
 	pods     []corev1.Pod
 	filtered []corev1.Pod
+	metrics  map[string]PodMetrics
 }
 
 func NewPodsPanel(client *k8s.Client, styles *theme.Styles) *PodsPanel {
@@ -99,6 +100,11 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 
 		return p, nil
 
+	case PodMetricsMsg:
+		p.metrics = msg.Metrics
+
+		return p, nil
+
 	case RefreshMsg:
 		if msg.PanelName == p.Title() {
 			return p, p.Refresh()
@@ -111,7 +117,6 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *PodsPanel) View() string {
 	var b strings.Builder
 
-	// Title
 	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
@@ -121,13 +126,11 @@ func (p *PodsPanel) View() string {
 
 	b.WriteString("\n")
 
-	// Calculate visible items
 	visibleHeight := p.height - 3
 	if visibleHeight < 1 {
 		visibleHeight = 1
 	}
 
-	// Determine scroll position
 	startIdx := 0
 	if p.cursor >= visibleHeight {
 		startIdx = p.cursor - visibleHeight + 1
@@ -138,7 +141,6 @@ func (p *PodsPanel) View() string {
 		endIdx = len(p.filtered)
 	}
 
-	// Render items
 	for i := startIdx; i < endIdx; i++ {
 		pod := p.filtered[i]
 		line := p.renderPodLine(pod, i == p.cursor)
@@ -146,7 +148,6 @@ func (p *PodsPanel) View() string {
 		b.WriteString("\n")
 	}
 
-	// Apply panel style
 	style := p.styles.Panel
 	if p.focused {
 		style = p.styles.PanelFocused
@@ -156,18 +157,48 @@ func (p *PodsPanel) View() string {
 }
 
 func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
-	name := utils.Truncate(pod.Name, p.width-15)
 	status := k8s.GetPodStatus(&pod)
+
+	metricsKey := pod.Namespace + "/" + pod.Name
+	hasMetrics := false
+
+	var cpuStr, memStr string
+
+	if m, ok := p.metrics[metricsKey]; ok {
+		hasMetrics = true
+		cpuStr = utils.FormatCPU(m.CPU)
+		memStr = utils.FormatMemory(m.Memory)
+	}
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	// Pad and add status
-	line = utils.PadRight(line, p.width-12)
+	// Calculate available space for name based on what we need to show
+	// Status: ~10 chars, CPU: ~6 chars, Memory: ~6 chars
+	nameWidth := p.width - 15
+
+	if hasMetrics {
+		nameWidth = p.width - 28
+	}
+
+	if nameWidth < 10 {
+		nameWidth = 10
+	}
+
+	line += utils.Truncate(pod.Name, nameWidth)
+
+	if hasMetrics {
+		line = utils.PadRight(line, p.width-25)
+		line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))
+		line += " " + p.styles.Muted.Render(utils.PadLeft(memStr, 6))
+	} else {
+		line = utils.PadRight(line, p.width-12)
+	}
+
 	statusStyle := p.styles.GetStatusStyle(status)
 	line += " " + statusStyle.Render(utils.Truncate(status, 10))
 
@@ -191,7 +222,6 @@ func (p *PodsPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Pod: " + pod.Name))
 	b.WriteString("\n\n")
 
-	// Basic info
 	status := k8s.GetPodStatus(&pod)
 
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
@@ -224,7 +254,22 @@ func (p *PodsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Containers
+	// Show metrics if available
+	metricsKey := pod.Namespace + "/" + pod.Name
+	if m, ok := p.metrics[metricsKey]; ok {
+		b.WriteString("\n")
+		b.WriteString(p.styles.DetailTitle.Render("Resource Usage:"))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("CPU:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatCPU(m.CPU)))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("Memory:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatMemory(m.Memory)))
+		b.WriteString("\n")
+	}
+
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Containers:"))
 	b.WriteString("\n")
@@ -275,7 +320,6 @@ func (p *PodsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Key hints
 	b.WriteString("\n")
 	b.WriteString(p.styles.Muted.Render("[l]ogs [x]exec [p]ort-forward [d]escribe [y]aml [D]elete"))
 
@@ -418,7 +462,6 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 			b.WriteString("\n")
 		}
 
-		// Find container status
 		for _, cs := range pod.Status.ContainerStatuses {
 			if cs.Name == container.Name {
 				b.WriteString(fmt.Sprintf("    Ready:   %v\n", cs.Ready))

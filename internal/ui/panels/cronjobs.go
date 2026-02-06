@@ -320,7 +320,6 @@ func (p *CronJobsPanel) toggleSuspend() tea.Cmd {
 		currentSuspend = *cj.Spec.Suspend
 	}
 
-	// Toggle suspend state
 	newSuspend := !currentSuspend
 
 	return func() tea.Msg {

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
@@ -22,16 +23,11 @@ import (
 )
 
 var (
-	// ErrInvalidReplicaCount is returned when the replica count is invalid.
 	ErrInvalidReplicaCount = errors.New("replica count must be non-negative")
-	// ErrInvalidPortFormat is returned when the port format is invalid.
-	ErrInvalidPortFormat = errors.New("invalid port format, use local:remote or port")
-	// ErrMinReplicasTooLow is returned when min replicas is less than 1.
-	ErrMinReplicasTooLow = errors.New("min replicas must be at least 1")
-	// ErrMaxReplicasTooLow is returned when max replicas is less than 1.
-	ErrMaxReplicasTooLow = errors.New("max replicas must be at least 1")
-	// ErrApplyFailed is returned when kubectl apply fails.
-	ErrApplyFailed = errors.New("kubectl apply failed")
+	ErrInvalidPortFormat   = errors.New("invalid port format, use local:remote or port")
+	ErrMinReplicasTooLow   = errors.New("min replicas must be at least 1")
+	ErrMaxReplicasTooLow   = errors.New("max replicas must be at least 1")
+	ErrApplyFailed         = errors.New("kubectl apply failed")
 )
 
 type ViewMode int
@@ -50,6 +46,10 @@ const (
 
 // borderLines is the number of lines used by panel borders (top + bottom).
 const borderLines = 2
+
+const metricsRefreshInterval = 10 * time.Second
+
+type metricsTickMsg time.Time
 
 type Model struct {
 	// Core dependencies
@@ -76,7 +76,6 @@ type Model struct {
 	search    *components.Search
 	input     *components.Input
 
-	// Input action callback - stores the function to call when input is submitted
 	pendingInputAction func(value string) tea.Cmd
 
 	// State
@@ -102,6 +101,9 @@ type Model struct {
 	execContainers []string
 	execPodName    string
 	execNamespace  string
+
+	// Metrics
+	metricsClient *k8s.MetricsClient
 }
 
 func NewModel(client *k8s.Client, cfg *config.Config) *Model {
@@ -117,7 +119,6 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 		portForwards: make(map[string]*k8s.PortForwarder),
 	}
 
-	// Initialize header and status bar
 	m.header = components.NewHeader(styles, client.CurrentContext(), client.CurrentNamespace())
 	m.statusBar = components.NewStatusBar(styles)
 	m.help = components.NewHelp(styles, keys)
@@ -127,7 +128,12 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.search = components.NewSearch(styles)
 	m.input = components.NewInput(styles)
 
-	// Initialize panels based on config
+	// Initialize metrics client (optional - may fail if metrics-server not installed)
+	metricsClient, err := client.NewMetricsClient()
+	if err == nil {
+		m.metricsClient = metricsClient
+	}
+
 	m.initPanels()
 
 	return m
@@ -177,7 +183,6 @@ func (m *Model) initPanels() {
 		}
 	}
 
-	// Set first panel as active
 	if len(m.panels) > 0 {
 		m.panels[0].SetFocused(true)
 	}
@@ -186,9 +191,12 @@ func (m *Model) initPanels() {
 func (m *Model) Init() tea.Cmd {
 	var cmds []tea.Cmd
 
-	// Initialize all panels
 	for _, panel := range m.panels {
 		cmds = append(cmds, panel.Init())
+	}
+
+	if m.metricsClient != nil {
+		cmds = append(cmds, m.fetchMetrics(), m.metricsTickCmd())
 	}
 
 	return tea.Batch(cmds...)
@@ -252,7 +260,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.confirm.Done() {
 				m.viewMode = ViewNormal
 				if m.confirm.Confirmed() {
-					// Execute the confirmed action
 					return m, m.confirm.Action()
 				}
 			}
@@ -293,7 +300,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.search, cmd = m.search.Update(msg)
 			m.searchQuery = m.search.Value()
-			// Apply filter to current panel
+
 			if len(m.panels) > m.activePanelIdx {
 				m.panels[m.activePanelIdx].SetFilter(m.searchQuery)
 			}
@@ -301,7 +308,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Global keys
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			m.stopAllPortForwards()
@@ -349,7 +355,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(cmds...)
 
-		// Panel number shortcuts
 		case key.Matches(msg, m.keys.Panel1):
 			m.selectPanel(0)
 		case key.Matches(msg, m.keys.Panel2):
@@ -369,7 +374,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Panel9):
 			m.selectPanel(8)
 
-		// Resource actions
 		case key.Matches(msg, m.keys.Yaml):
 			return m.showYaml()
 
@@ -392,7 +396,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.editResource()
 
 		default:
-			// Pass to active panel
 			if len(m.panels) > m.activePanelIdx {
 				panel, cmd := m.panels[m.activePanelIdx].Update(msg)
 				m.panels[m.activePanelIdx] = panel
@@ -440,6 +443,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetMessage(m.lastStatus)
 
 		return m, m.refreshAllPanels()
+
+	case metricsTickMsg:
+		return m, tea.Batch(m.metricsTickCmd(), m.fetchMetrics())
+
+	case metricsLoadedMsg:
+		var cmds []tea.Cmd
+
+		for _, panel := range m.panels {
+			if panel.Title() == "Pods" {
+				_, cmd := panel.Update(panels.PodMetricsMsg{Metrics: msg.podMetrics})
+				cmds = append(cmds, cmd)
+			} else if panel.Title() == "Nodes" {
+				_, cmd := panel.Update(panels.NodeMetricsMsg{Metrics: msg.nodeMetrics})
+				cmds = append(cmds, cmd)
+			}
+		}
+
+		return m, tea.Batch(cmds...)
 
 	case components.InputSubmitMsg:
 		m.viewMode = ViewNormal
@@ -519,12 +540,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Single container - exec directly
 		if len(msg.Containers) == 1 {
 			return m, m.execIntoPod(msg.Namespace, msg.PodName, msg.Containers[0])
 		}
 
-		// Multiple containers - show selection
 		m.execContainers = msg.Containers
 		m.execPodName = msg.PodName
 		m.execNamespace = msg.Namespace
@@ -620,14 +639,12 @@ func (m *Model) View() string {
 		content = m.logView.View(m.width, m.height)
 	case ViewConfirm:
 		content = m.renderNormalView()
-		// Overlay confirm dialog
 		confirmView := m.confirm.View()
 		content = m.overlayView(content, confirmView)
 	case ViewContextSwitch, ViewNamespaceSwitch, ViewContainerSelect:
 		content = m.renderSwitchView()
 	case ViewInput:
 		content = m.renderNormalView()
-		// Overlay input dialog
 		inputView := m.input.View()
 		content = m.overlayView(content, inputView)
 	case ViewNormal:
@@ -658,10 +675,8 @@ func (m *Model) renderNormalView() string {
 		panelHeight -= 2
 	}
 
-	// Render panels
 	panelsView := m.renderPanels(m.width, panelHeight)
 
-	// Combine views
 	var b strings.Builder
 	b.WriteString(header)
 	b.WriteString("\n")
@@ -683,11 +698,9 @@ func (m *Model) renderPanels(width, height int) string {
 		return "No panels configured"
 	}
 
-	// Calculate panel widths
 	leftPanelWidth := width / 4
 	rightPanelWidth := width - leftPanelWidth - 1
 
-	// Left side: stacked resource lists
 	numPanels := len(m.panels)
 	borderOverhead := numPanels * borderLines
 
@@ -705,7 +718,6 @@ func (m *Model) renderPanels(width, height int) string {
 
 	leftView := lipgloss.JoinVertical(lipgloss.Left, leftPanels...)
 
-	// Right side: detail view
 	detailHeight := max(height-borderLines, 1)
 
 	rightView := m.renderDetailView(rightPanelWidth, detailHeight)
@@ -936,7 +948,6 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 }
 
 func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	// Filter input mode - typing goes to filter
 	if m.switchFilterActive {
 		switch msg.String() {
 		case "esc":
@@ -958,7 +969,6 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -1006,7 +1016,6 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	// Filter input mode - typing goes to filter
 	if m.switchFilterActive {
 		switch msg.String() {
 		case "esc":
@@ -1030,7 +1039,6 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -1374,7 +1382,6 @@ func (m *Model) refreshAllPanels() tea.Cmd {
 }
 
 func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	// Filter input mode - typing goes to filter
 	if m.switchFilterActive {
 		switch msg.String() {
 		case "esc":
@@ -1398,7 +1405,6 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -1528,7 +1534,6 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Create temp file for editing
 	tmpDir := os.TempDir()
 
 	f, err := os.CreateTemp(tmpDir, fmt.Sprintf("lazy-k8s-%s-*.yaml", name))
@@ -1567,7 +1572,6 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 		editor = "vim"
 	}
 
-	// Spawn editor process
 	cmd := exec.Command(editor, tmpFile) //nolint:gosec,noctx
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -1580,7 +1584,6 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 			return panels.ErrorMsg{Error: fmt.Errorf("editor failed: %w", err)}
 		}
 
-		// Apply the edited YAML using kubectl
 		applyCmd := exec.Command("kubectl", "apply", "-f", tmpFile) //nolint:gosec,noctx
 
 		output, err := applyCmd.CombinedOutput()
@@ -1598,4 +1601,70 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 
 func newKubectlCmd(args ...string) *exec.Cmd {
 	return exec.Command("kubectl", args...) //nolint:noctx
+}
+
+func (m *Model) metricsTickCmd() tea.Cmd {
+	return tea.Tick(metricsRefreshInterval, func(t time.Time) tea.Msg {
+		return metricsTickMsg(t)
+	})
+}
+
+func (m *Model) fetchMetrics() tea.Cmd {
+	if m.metricsClient == nil {
+		return nil
+	}
+
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		var podMetrics map[string]panels.PodMetrics
+
+		if m.showAllNs {
+			k8sMetrics, _ := m.metricsClient.GetAllPodMetrics(ctx)
+			podMetrics = convertPodMetrics(k8sMetrics)
+		} else {
+			k8sMetrics, _ := m.metricsClient.GetPodMetrics(ctx, m.k8sClient.CurrentNamespace())
+			podMetrics = convertPodMetrics(k8sMetrics)
+		}
+
+		k8sNodeMetrics, _ := m.metricsClient.GetNodeMetrics(ctx)
+		nodeMetrics := convertNodeMetrics(k8sNodeMetrics)
+
+		return metricsLoadedMsg{
+			podMetrics:  podMetrics,
+			nodeMetrics: nodeMetrics,
+		}
+	}
+}
+
+type metricsLoadedMsg struct {
+	podMetrics  map[string]panels.PodMetrics
+	nodeMetrics map[string]panels.NodeMetrics
+}
+
+func convertPodMetrics(k8sMetrics map[string]k8s.PodMetrics) map[string]panels.PodMetrics {
+	result := make(map[string]panels.PodMetrics, len(k8sMetrics))
+	for key, m := range k8sMetrics {
+		result[key] = panels.PodMetrics{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+			CPU:       m.CPU,
+			Memory:    m.Memory,
+		}
+	}
+
+	return result
+}
+
+func convertNodeMetrics(k8sMetrics map[string]k8s.NodeMetrics) map[string]panels.NodeMetrics {
+	result := make(map[string]panels.NodeMetrics, len(k8sMetrics))
+	for key, m := range k8sMetrics {
+		result[key] = panels.NodeMetrics{
+			Name:   m.Name,
+			CPU:    m.CPU,
+			Memory: m.Memory,
+		}
+	}
+
+	return result
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Truncate truncates a string to the specified length, adding "..." if truncated.
+// Truncate appends "..." if s exceeds maxLen. If maxLen <= 3, hard-cuts without ellipsis.
 func Truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -18,7 +18,6 @@ func Truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
-// PadRight pads a string with spaces on the right to reach the desired length.
 func PadRight(s string, length int) string {
 	if len(s) >= length {
 		return s
@@ -27,7 +26,6 @@ func PadRight(s string, length int) string {
 	return s + strings.Repeat(" ", length-len(s))
 }
 
-// PadLeft pads a string with spaces on the left to reach the desired length.
 func PadLeft(s string, length int) string {
 	if len(s) >= length {
 		return s
@@ -36,7 +34,6 @@ func PadLeft(s string, length int) string {
 	return strings.Repeat(" ", length-len(s)) + s
 }
 
-// Center centers a string within the given width.
 func Center(s string, width int) string {
 	if len(s) >= width {
 		return s
@@ -48,7 +45,6 @@ func Center(s string, width int) string {
 	return strings.Repeat(" ", leftPad) + s + strings.Repeat(" ", rightPad)
 }
 
-// WrapText wraps text to fit within the specified width.
 func WrapText(text string, width int) []string {
 	if width <= 0 {
 		return []string{text}
@@ -76,7 +72,6 @@ func WrapText(text string, width int) []string {
 	return lines
 }
 
-// Contains checks if a string slice contains a specific string.
 func Contains(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
@@ -87,7 +82,6 @@ func Contains(slice []string, item string) bool {
 	return false
 }
 
-// FilterStrings filters a slice of strings based on a predicate.
 func FilterStrings(slice []string, predicate func(string) bool) []string {
 	result := make([]string, 0)
 
@@ -100,7 +94,6 @@ func FilterStrings(slice []string, predicate func(string) bool) []string {
 	return result
 }
 
-// Max returns the maximum of two integers.
 func Max(a, b int) int {
 	if a > b {
 		return a
@@ -109,7 +102,6 @@ func Max(a, b int) int {
 	return b
 }
 
-// Min returns the minimum of two integers.
 func Min(a, b int) int {
 	if a < b {
 		return a
@@ -118,7 +110,6 @@ func Min(a, b int) int {
 	return b
 }
 
-// Clamp constrains a value to the given range.
 func Clamp(value, minVal, maxVal int) int {
 	if value < minVal {
 		return minVal
@@ -131,7 +122,7 @@ func Clamp(value, minVal, maxVal int) int {
 	return value
 }
 
-// SplitNamespacedName splits a "namespace/name" string.
+// SplitNamespacedName returns empty namespace if no "/" is present.
 func SplitNamespacedName(namespacedName string) (namespace, name string) {
 	parts := strings.SplitN(namespacedName, "/", 2)
 	if len(parts) == 2 {
@@ -141,7 +132,7 @@ func SplitNamespacedName(namespacedName string) (namespace, name string) {
 	return "", parts[0]
 }
 
-// JoinNamespacedName joins namespace and name into "namespace/name" format.
+// JoinNamespacedName returns just the name if namespace is empty.
 func JoinNamespacedName(namespace, name string) string {
 	if namespace == "" {
 		return name

@@ -202,7 +202,6 @@ func (p *IngressPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Rules
 	if len(ing.Spec.Rules) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Rules:"))
@@ -239,7 +238,6 @@ func (p *IngressPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// TLS
 	if len(ing.Spec.TLS) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("TLS:"))

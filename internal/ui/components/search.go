@@ -61,7 +61,6 @@ func (s *Search) Update(msg tea.Msg) (*Search, tea.Cmd) {
 func (s *Search) View(width int) string {
 	s.input.Width = width - 6
 
-	// Simple inline style without border
 	return lipgloss.NewStyle().
 		Foreground(s.styles.Text).
 		Padding(0, 1).

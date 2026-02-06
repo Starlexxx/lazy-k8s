@@ -43,7 +43,6 @@ func (s *StatusBar) View(width int) string {
 			content = s.styles.StatusValue.Render(s.message)
 		}
 	} else {
-		// Default hint
 		hints := []string{
 			s.styles.StatusKey.Render("q") + " quit",
 			s.styles.StatusKey.Render("?") + " help",

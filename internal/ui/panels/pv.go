@@ -181,7 +181,6 @@ func (p *PVPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(utils.FormatAgeFromMeta(pv.CreationTimestamp)))
 	b.WriteString("\n")
 
-	// Claim
 	if pv.Spec.ClaimRef != nil {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Claim:"))
@@ -194,7 +193,6 @@ func (p *PVPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Source
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Source:"))
 	b.WriteString("\n")

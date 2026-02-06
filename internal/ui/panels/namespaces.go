@@ -51,7 +51,6 @@ func (p *NamespacesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			p.MoveToBottom(len(p.filtered))
 		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
-			// Switch to selected namespace
 			if p.Cursor() < len(p.filtered) {
 				ns := p.filtered[p.Cursor()]
 				p.client.SetNamespace(ns.Name)
@@ -80,7 +79,6 @@ func (p *NamespacesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *NamespacesPanel) View() string {
 	var b strings.Builder
 
-	// Title
 	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
@@ -90,13 +88,11 @@ func (p *NamespacesPanel) View() string {
 
 	b.WriteString("\n")
 
-	// Calculate visible items
-	visibleHeight := p.height - 3 // title + border
+	visibleHeight := p.height - 3
 	if visibleHeight < 1 {
 		visibleHeight = 1
 	}
 
-	// Determine scroll position
 	startIdx := 0
 	if p.cursor >= visibleHeight {
 		startIdx = p.cursor - visibleHeight + 1
@@ -107,7 +103,6 @@ func (p *NamespacesPanel) View() string {
 		endIdx = len(p.filtered)
 	}
 
-	// Render items
 	for i := startIdx; i < endIdx; i++ {
 		ns := p.filtered[i]
 		line := p.renderNamespaceLine(ns, i == p.cursor)
@@ -115,7 +110,6 @@ func (p *NamespacesPanel) View() string {
 		b.WriteString("\n")
 	}
 
-	// Apply panel style
 	style := p.styles.Panel
 	if p.focused {
 		style = p.styles.PanelFocused
@@ -135,7 +129,6 @@ func (p *NamespacesPanel) renderNamespaceLine(ns corev1.Namespace, selected bool
 		line = "  " + name
 	}
 
-	// Pad and add status indicator
 	line = utils.PadRight(line, p.width-10)
 
 	statusStyle := p.styles.GetStatusStyle(status)
@@ -161,17 +154,14 @@ func (p *NamespacesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Namespace: " + ns.Name))
 	b.WriteString("\n\n")
 
-	// Status
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
 	b.WriteString(p.styles.GetStatusStyle(string(ns.Status.Phase)).Render(string(ns.Status.Phase)))
 	b.WriteString("\n")
 
-	// Age
 	b.WriteString(p.styles.DetailLabel.Render("Age:"))
 	b.WriteString(p.styles.DetailValue.Render(utils.FormatAgeFromMeta(ns.CreationTimestamp)))
 	b.WriteString("\n")
 
-	// Labels
 	if len(ns.Labels) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Labels:"))
@@ -182,7 +172,6 @@ func (p *NamespacesPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Annotations
 	if len(ns.Annotations) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Annotations:"))
@@ -304,7 +293,6 @@ func (p *NamespacesPanel) applyFilter() {
 		}
 	}
 
-	// Reset cursor if out of bounds
 	if p.cursor >= len(p.filtered) {
 		p.cursor = len(p.filtered) - 1
 		if p.cursor < 0 {

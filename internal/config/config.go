@@ -103,7 +103,6 @@ func Load() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
-	// Config paths
 	if configDir, err := os.UserConfigDir(); err == nil {
 		viper.AddConfigPath(filepath.Join(configDir, "lazy-k8s"))
 	}
@@ -115,21 +114,18 @@ func Load() (*Config, error) {
 
 	viper.AddConfigPath(".")
 
-	// Read config file if it exists
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundError) {
-			// Only return error if it's NOT a "config file not found" error
+			// Missing config file is expected (user may rely on defaults); only fail on actual read/parse errors
 			return nil, err
 		}
-		// Config file not found is fine, use defaults
 	}
 
 	if err := viper.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
 
-	// Set namespace from defaults if not specified
 	if cfg.Namespace == "" {
 		cfg.Namespace = cfg.Defaults.Namespace
 	}

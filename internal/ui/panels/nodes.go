@@ -22,6 +22,7 @@ type NodesPanel struct {
 	styles   *theme.Styles
 	nodes    []corev1.Node
 	filtered []corev1.Node
+	metrics  map[string]NodeMetrics
 }
 
 func NewNodesPanel(client *k8s.Client, styles *theme.Styles) *NodesPanel {
@@ -56,6 +57,11 @@ func (p *NodesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 	case nodesLoadedMsg:
 		p.nodes = msg.nodes
 		p.applyFilter()
+
+		return p, nil
+
+	case NodeMetricsMsg:
+		p.metrics = msg.Metrics
 
 		return p, nil
 
@@ -111,17 +117,47 @@ func (p *NodesPanel) View() string {
 }
 
 func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
-	name := utils.Truncate(node.Name, p.width-12)
 	status := k8s.GetNodeStatus(&node)
+
+	hasMetrics := false
+
+	var cpuStr, memStr string
+
+	if m, ok := p.metrics[node.Name]; ok {
+		hasMetrics = true
+		cpuStr = utils.FormatCPU(m.CPU)
+		memStr = utils.FormatMemory(m.Memory)
+	}
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-10)
+	// Calculate available space for name based on what we need to show
+	nameWidth := p.width - 12
+
+	if hasMetrics {
+		nameWidth = p.width - 28
+	}
+
+	if nameWidth < 10 {
+		nameWidth = 10
+	}
+
+	line += utils.Truncate(node.Name, nameWidth)
+
+	// Pad based on whether we show metrics
+	if hasMetrics {
+		line = utils.PadRight(line, p.width-25)
+		line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))
+		line += " " + p.styles.Muted.Render(utils.PadLeft(memStr, 6))
+	} else {
+		line = utils.PadRight(line, p.width-10)
+	}
+
 	statusStyle := p.styles.GetStatusStyle(status)
 	line += " " + statusStyle.Render(status)
 
@@ -145,21 +181,18 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Node: " + node.Name))
 	b.WriteString("\n\n")
 
-	// Status
 	status := k8s.GetNodeStatus(&node)
 
 	b.WriteString(p.styles.DetailLabel.Render("Status:"))
 	b.WriteString(p.styles.GetStatusStyle(status).Render(status))
 	b.WriteString("\n")
 
-	// Roles
 	roles := k8s.GetNodeRoles(&node)
 
 	b.WriteString(p.styles.DetailLabel.Render("Roles:"))
 	b.WriteString(p.styles.DetailValue.Render(roles))
 	b.WriteString("\n")
 
-	// Age
 	b.WriteString(p.styles.DetailLabel.Render("Age:"))
 	b.WriteString(p.styles.DetailValue.Render(utils.FormatAgeFromMeta(node.CreationTimestamp)))
 	b.WriteString("\n")
@@ -169,7 +202,6 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(node.Status.NodeInfo.KubeletVersion))
 	b.WriteString("\n")
 
-	// IPs
 	internalIP := k8s.GetNodeInternalIP(&node)
 
 	b.WriteString(p.styles.DetailLabel.Render("Internal IP:"))
@@ -182,7 +214,6 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(externalIP))
 	b.WriteString("\n")
 
-	// System info
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("System Info:"))
 	b.WriteString("\n")
@@ -207,7 +238,6 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(node.Status.NodeInfo.ContainerRuntimeVersion))
 	b.WriteString("\n")
 
-	// Capacity
 	cpu, memory := k8s.GetNodeCapacity(&node)
 
 	b.WriteString("\n")
@@ -222,7 +252,21 @@ func (p *NodesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(memory))
 	b.WriteString("\n")
 
-	// Conditions
+	// Show current usage if metrics available
+	if m, ok := p.metrics[node.Name]; ok {
+		b.WriteString("\n")
+		b.WriteString(p.styles.DetailTitle.Render("Current Usage:"))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("CPU:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatCPU(m.CPU)))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("Memory:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatMemory(m.Memory)))
+		b.WriteString("\n")
+	}
+
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Conditions:"))
 	b.WriteString("\n")
