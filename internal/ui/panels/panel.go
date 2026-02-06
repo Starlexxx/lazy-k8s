@@ -81,6 +81,31 @@ type EditHPAMaxReplicasRequestMsg struct {
 	MaxReplicas int32
 }
 
+// PodMetricsMsg carries pod metrics data from metrics-server.
+type PodMetricsMsg struct {
+	Metrics map[string]PodMetrics
+}
+
+// PodMetrics contains CPU and memory usage for a pod.
+type PodMetrics struct {
+	Name      string
+	Namespace string
+	CPU       int64 // in millicores
+	Memory    int64 // in bytes
+}
+
+// NodeMetricsMsg carries node metrics data from metrics-server.
+type NodeMetricsMsg struct {
+	Metrics map[string]NodeMetrics
+}
+
+// NodeMetrics contains CPU and memory usage for a node.
+type NodeMetrics struct {
+	Name   string
+	CPU    int64 // in millicores
+	Memory int64 // in bytes
+}
+
 // Panel is the interface that all resource panels must implement.
 type Panel interface {
 	// Init initializes the panel and returns initial commands
