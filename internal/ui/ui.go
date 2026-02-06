@@ -969,8 +969,8 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			m.applySwitchFilter(m.contextList)
 		}
 	default:
-		// Type to filter
-		if r := msg.Runes; len(r) == 1 {
+		// Type to filter - only accept valid filter characters
+		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
 			m.switchFilter += string(r)
 			m.applySwitchFilter(m.contextList)
 		}
@@ -1015,7 +1015,7 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			m.applySwitchFilter(m.namespaceList)
 		}
 	default:
-		if r := msg.Runes; len(r) == 1 {
+		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
 			m.switchFilter += string(r)
 			m.applySwitchFilter(m.namespaceList)
 		}
@@ -1044,6 +1044,15 @@ func (m *Model) applySwitchFilter(source []string) {
 	}
 
 	m.selectIdx = 0
+}
+
+// isValidFilterChar returns true if the character is valid for filtering
+// Kubernetes resource names (alphanumeric, hyphen, underscore, dot).
+func isValidFilterChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') ||
+		r == '-' || r == '_' || r == '.'
 }
 
 func (m *Model) showYaml() (*Model, tea.Cmd) {
@@ -1343,7 +1352,7 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			m.applySwitchFilter(m.execContainers)
 		}
 	default:
-		if r := msg.Runes; len(r) == 1 {
+		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
 			m.switchFilter += string(r)
 			m.applySwitchFilter(m.execContainers)
 		}

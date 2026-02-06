@@ -377,6 +377,23 @@ func TestApplySwitchFilter(t *testing.T) {
 	}
 }
 
+// TestIsValidFilterChar tests character validation for filter input.
+func TestIsValidFilterChar(t *testing.T) {
+	validChars := []rune{'a', 'z', 'A', 'Z', '0', '9', '-', '_', '.'}
+	for _, c := range validChars {
+		if !isValidFilterChar(c) {
+			t.Errorf("'%c' should be valid", c)
+		}
+	}
+
+	invalidChars := []rune{'/', '\\', ' ', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')'}
+	for _, c := range invalidChars {
+		if isValidFilterChar(c) {
+			t.Errorf("'%c' should be invalid", c)
+		}
+	}
+}
+
 // TestPanelNavigationLogic tests panel navigation logic.
 func TestPanelNavigationLogic(t *testing.T) {
 	numPanels := 4
