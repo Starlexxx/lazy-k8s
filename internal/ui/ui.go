@@ -88,11 +88,12 @@ type Model struct {
 	searchQuery  string
 
 	// Context/namespace switching
-	contextList    []string
-	namespaceList  []string
-	selectIdx      int
-	switchFilter   string
-	switchFiltered []string
+	contextList        []string
+	namespaceList      []string
+	selectIdx          int
+	switchFilter       string
+	switchFiltered     []string
+	switchFilterActive bool
 
 	// Port forwarding
 	portForwards map[string]*k8s.PortForwarder
@@ -750,13 +751,17 @@ func (m *Model) renderSwitchView() string {
 	b.WriteString(m.styles.ModalTitle.Render(title))
 	b.WriteString("\n\n")
 
-	// Show filter input
-	filterDisplay := m.switchFilter
-	if filterDisplay == "" {
-		filterDisplay = "type to filter..."
+	// Show filter input - vim-style: press / to activate filter mode
+	if m.switchFilterActive {
+		filterDisplay := m.switchFilter + "_"
+		b.WriteString(m.styles.StatusKey.Render("  / "))
+		b.WriteString(m.styles.StatusValue.Render(filterDisplay))
+	} else if m.switchFilter != "" {
+		b.WriteString(m.styles.Muted.Render("  / " + m.switchFilter))
+	} else {
+		b.WriteString(m.styles.Muted.Render("  / to filter, j/k to navigate"))
 	}
 
-	b.WriteString(m.styles.Muted.Render("  / " + filterDisplay))
 	b.WriteString("\n\n")
 
 	// Cap visible items to keep modal compact
@@ -882,6 +887,7 @@ func (m *Model) selectPanel(idx int) {
 func (m *Model) startContextSwitch() (*Model, tea.Cmd) {
 	m.contextList = m.k8sClient.GetContexts()
 	m.switchFilter = ""
+	m.switchFilterActive = false
 	m.switchFiltered = m.contextList
 
 	m.selectIdx = 0
@@ -912,6 +918,7 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 	}
 
 	m.switchFilter = ""
+	m.switchFilterActive = false
 	m.switchFiltered = m.namespaceList
 
 	m.selectIdx = 0
@@ -929,6 +936,29 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 }
 
 func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.contextList)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.contextList)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -938,6 +968,8 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
 		if m.selectIdx < len(m.switchFiltered) {
 			ctx := m.switchFiltered[m.selectIdx]
@@ -962,17 +994,11 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
-	case "backspace":
-		if len(m.switchFilter) > 0 {
-			m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+		if m.switchFilter != "" {
+			m.switchFilter = ""
 			m.applySwitchFilter(m.contextList)
-		}
-	default:
-		// Type to filter - only accept valid filter characters
-		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
-			m.switchFilter += string(r)
-			m.applySwitchFilter(m.contextList)
+		} else {
+			m.viewMode = ViewNormal
 		}
 	}
 
@@ -980,6 +1006,31 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+			m.switchFilter = ""
+			m.applySwitchFilter(m.namespaceList)
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.namespaceList)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.namespaceList)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -989,6 +1040,8 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
 		if m.selectIdx < len(m.switchFiltered) {
 			ns := m.switchFiltered[m.selectIdx]
@@ -1008,16 +1061,11 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
-	case "backspace":
-		if len(m.switchFilter) > 0 {
-			m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+		if m.switchFilter != "" {
+			m.switchFilter = ""
 			m.applySwitchFilter(m.namespaceList)
-		}
-	default:
-		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
-			m.switchFilter += string(r)
-			m.applySwitchFilter(m.namespaceList)
+		} else {
+			m.viewMode = ViewNormal
 		}
 	}
 
@@ -1326,6 +1374,31 @@ func (m *Model) refreshAllPanels() tea.Cmd {
 }
 
 func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+			m.switchFilter = ""
+			m.applySwitchFilter(m.execContainers)
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.execContainers)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.execContainers)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
@@ -1335,6 +1408,8 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
 		if m.selectIdx < len(m.switchFiltered) {
 			container := m.switchFiltered[m.selectIdx]
@@ -1345,16 +1420,11 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
-	case "backspace":
-		if len(m.switchFilter) > 0 {
-			m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+		if m.switchFilter != "" {
+			m.switchFilter = ""
 			m.applySwitchFilter(m.execContainers)
-		}
-	default:
-		if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
-			m.switchFilter += string(r)
-			m.applySwitchFilter(m.execContainers)
+		} else {
+			m.viewMode = ViewNormal
 		}
 	}
 
