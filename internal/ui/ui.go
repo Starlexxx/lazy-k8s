@@ -88,9 +88,12 @@ type Model struct {
 	searchQuery  string
 
 	// Context/namespace switching
-	contextList   []string
-	namespaceList []string
-	selectIdx     int
+	contextList        []string
+	namespaceList      []string
+	selectIdx          int
+	switchFilter       string
+	switchFiltered     []string
+	switchFilterActive bool
 
 	// Port forwarding
 	portForwards map[string]*k8s.PortForwarder
@@ -526,6 +529,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.execPodName = msg.PodName
 		m.execNamespace = msg.Namespace
 		m.selectIdx = 0
+		m.switchFilter = ""
+		m.switchFiltered = msg.Containers
 		m.viewMode = ViewContainerSelect
 
 		return m, nil
@@ -721,35 +726,86 @@ func (m *Model) renderDetailView(width, height int) string {
 	return style.Render(detail)
 }
 
+// maxSwitchItems is the maximum number of items shown in the
+// context/namespace/container selector to keep the modal compact.
+const maxSwitchItems = 20
+
 func (m *Model) renderSwitchView() string {
-	var (
-		title       string
-		items       []string
-		selectedIdx int
-	)
+	var title string
 
 	switch m.viewMode {
 	case ViewContextSwitch:
 		title = "Switch Context"
-		items = m.contextList
-		selectedIdx = m.selectIdx
 	case ViewNamespaceSwitch:
 		title = "Switch Namespace"
-		items = m.namespaceList
-		selectedIdx = m.selectIdx
 	case ViewContainerSelect:
 		title = "Select Container"
-		items = m.execContainers
-		selectedIdx = m.selectIdx
 	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewConfirm, ViewInput:
 		// These view modes don't use renderSwitchView
 	}
+
+	items := m.switchFiltered
+	selectedIdx := m.selectIdx
 
 	var b strings.Builder
 	b.WriteString(m.styles.ModalTitle.Render(title))
 	b.WriteString("\n\n")
 
-	for i, item := range items {
+	// Show filter input - vim-style: press / to activate filter mode
+	if m.switchFilterActive {
+		filterDisplay := m.switchFilter + "_"
+		b.WriteString(m.styles.StatusKey.Render("  / "))
+		b.WriteString(m.styles.StatusValue.Render(filterDisplay))
+	} else if m.switchFilter != "" {
+		b.WriteString(m.styles.Muted.Render("  / " + m.switchFilter))
+	} else {
+		b.WriteString(m.styles.Muted.Render("  / to filter, j/k to navigate"))
+	}
+
+	b.WriteString("\n\n")
+
+	// Cap visible items to keep modal compact
+	maxVisible := maxSwitchItems
+	screenMax := m.height - 12
+
+	if screenMax < maxVisible {
+		maxVisible = screenMax
+	}
+
+	if maxVisible < 3 {
+		maxVisible = 3
+	}
+
+	// Calculate scroll window to keep selected item visible
+	startIdx := 0
+	endIdx := len(items)
+
+	if len(items) > maxVisible {
+		halfVisible := maxVisible / 2
+		startIdx = selectedIdx - halfVisible
+
+		if startIdx < 0 {
+			startIdx = 0
+		}
+
+		endIdx = startIdx + maxVisible
+		if endIdx > len(items) {
+			endIdx = len(items)
+			startIdx = endIdx - maxVisible
+
+			if startIdx < 0 {
+				startIdx = 0
+			}
+		}
+	}
+
+	if startIdx > 0 {
+		b.WriteString(m.styles.Muted.Render(fmt.Sprintf("  ↑ %d more", startIdx)))
+		b.WriteString("\n")
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		item := items[i]
 		if i == selectedIdx {
 			b.WriteString(m.styles.ListItemFocused.Render("> " + item))
 		} else {
@@ -759,12 +815,27 @@ func (m *Model) renderSwitchView() string {
 		b.WriteString("\n")
 	}
 
+	if endIdx < len(items) {
+		b.WriteString(m.styles.Muted.Render(fmt.Sprintf("  ↓ %d more", len(items)-endIdx)))
+		b.WriteString("\n")
+	}
+
+	if len(items) == 0 && m.switchFilter != "" {
+		b.WriteString(m.styles.Muted.Render("  No matches"))
+		b.WriteString("\n")
+	}
+
 	b.WriteString("\n")
 	b.WriteString(m.styles.Muted.Render("↑/↓ navigate • enter select • esc cancel"))
 
-	content := m.styles.Modal.Width(40).Render(b.String())
+	// Use wider modal to fit long names
+	modalWidth := m.width / 2
+	if modalWidth < 50 {
+		modalWidth = 50
+	}
 
-	// Center the modal
+	content := m.styles.Modal.Width(modalWidth).Render(b.String())
+
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 }
 
@@ -815,9 +886,12 @@ func (m *Model) selectPanel(idx int) {
 
 func (m *Model) startContextSwitch() (*Model, tea.Cmd) {
 	m.contextList = m.k8sClient.GetContexts()
+	m.switchFilter = ""
+	m.switchFilterActive = false
+	m.switchFiltered = m.contextList
 
 	m.selectIdx = 0
-	for i, ctx := range m.contextList {
+	for i, ctx := range m.switchFiltered {
 		if ctx == m.k8sClient.CurrentContext() {
 			m.selectIdx = i
 
@@ -831,7 +905,6 @@ func (m *Model) startContextSwitch() (*Model, tea.Cmd) {
 }
 
 func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
-	// Fetch namespaces
 	nsList, err := m.k8sClient.ListNamespaces(m.k8sClient.Context())
 	if err != nil {
 		m.statusBar.SetError(fmt.Sprintf("Failed to list namespaces: %v", err))
@@ -844,8 +917,12 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 		m.namespaceList = append(m.namespaceList, ns.Name)
 	}
 
+	m.switchFilter = ""
+	m.switchFilterActive = false
+	m.switchFiltered = m.namespaceList
+
 	m.selectIdx = 0
-	for i, ns := range m.namespaceList {
+	for i, ns := range m.switchFiltered {
 		if ns == m.k8sClient.CurrentNamespace() {
 			m.selectIdx = i
 
@@ -859,25 +936,51 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 }
 
 func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.contextList)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.contextList)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
 			m.selectIdx--
 		}
 	case "down", "j":
-		if m.selectIdx < len(m.contextList)-1 {
+		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
-		if m.selectIdx < len(m.contextList) {
-			ctx := m.contextList[m.selectIdx]
+		if m.selectIdx < len(m.switchFiltered) {
+			ctx := m.switchFiltered[m.selectIdx]
+
 			if err := m.k8sClient.SwitchContext(ctx); err != nil {
 				m.statusBar.SetError(fmt.Sprintf("Failed to switch context: %v", err))
 			} else {
 				m.header.SetContext(ctx)
 				m.header.SetNamespace(m.k8sClient.CurrentNamespace())
 				m.statusBar.SetMessage(fmt.Sprintf("Switched to context: %s", ctx))
-				// Refresh all panels
+
 				var cmds []tea.Cmd
 				for _, panel := range m.panels {
 					cmds = append(cmds, panel.Refresh())
@@ -891,29 +994,61 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
+		if m.switchFilter != "" {
+			m.switchFilter = ""
+			m.applySwitchFilter(m.contextList)
+		} else {
+			m.viewMode = ViewNormal
+		}
 	}
 
 	return m, nil
 }
 
 func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+			m.switchFilter = ""
+			m.applySwitchFilter(m.namespaceList)
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.namespaceList)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.namespaceList)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
 			m.selectIdx--
 		}
 	case "down", "j":
-		if m.selectIdx < len(m.namespaceList)-1 {
+		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
-		if m.selectIdx < len(m.namespaceList) {
-			ns := m.namespaceList[m.selectIdx]
+		if m.selectIdx < len(m.switchFiltered) {
+			ns := m.switchFiltered[m.selectIdx]
 			m.k8sClient.SetNamespace(ns)
 			m.header.SetNamespace(ns)
 			m.statusBar.SetMessage(fmt.Sprintf("Switched to namespace: %s", ns))
-			// Refresh all panels
+
 			var cmds []tea.Cmd
 			for _, panel := range m.panels {
 				cmds = append(cmds, panel.Refresh())
@@ -926,10 +1061,46 @@ func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
+		if m.switchFilter != "" {
+			m.switchFilter = ""
+			m.applySwitchFilter(m.namespaceList)
+		} else {
+			m.viewMode = ViewNormal
+		}
 	}
 
 	return m, nil
+}
+
+// applySwitchFilter filters the source list by the current switchFilter
+// and resets the selection cursor.
+func (m *Model) applySwitchFilter(source []string) {
+	if m.switchFilter == "" {
+		m.switchFiltered = source
+		m.selectIdx = 0
+
+		return
+	}
+
+	query := strings.ToLower(m.switchFilter)
+	m.switchFiltered = make([]string, 0)
+
+	for _, item := range source {
+		if strings.Contains(strings.ToLower(item), query) {
+			m.switchFiltered = append(m.switchFiltered, item)
+		}
+	}
+
+	m.selectIdx = 0
+}
+
+// isValidFilterChar returns true if the character is valid for filtering
+// Kubernetes resource names (alphanumeric, hyphen, underscore, dot).
+func isValidFilterChar(r rune) bool {
+	return (r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9') ||
+		r == '-' || r == '_' || r == '.'
 }
 
 func (m *Model) showYaml() (*Model, tea.Cmd) {
@@ -1203,18 +1374,45 @@ func (m *Model) refreshAllPanels() tea.Cmd {
 }
 
 func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	// Filter input mode - typing goes to filter
+	if m.switchFilterActive {
+		switch msg.String() {
+		case "esc":
+			m.switchFilterActive = false
+			m.switchFilter = ""
+			m.applySwitchFilter(m.execContainers)
+		case "enter":
+			m.switchFilterActive = false
+		case "backspace":
+			if len(m.switchFilter) > 0 {
+				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
+				m.applySwitchFilter(m.execContainers)
+			}
+		default:
+			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
+				m.switchFilter += string(r)
+				m.applySwitchFilter(m.execContainers)
+			}
+		}
+
+		return m, nil
+	}
+
+	// Navigation mode
 	switch msg.String() {
 	case "up", "k":
 		if m.selectIdx > 0 {
 			m.selectIdx--
 		}
 	case "down", "j":
-		if m.selectIdx < len(m.execContainers)-1 {
+		if m.selectIdx < len(m.switchFiltered)-1 {
 			m.selectIdx++
 		}
+	case "/":
+		m.switchFilterActive = true
 	case "enter":
-		if m.selectIdx < len(m.execContainers) {
-			container := m.execContainers[m.selectIdx]
+		if m.selectIdx < len(m.switchFiltered) {
+			container := m.switchFiltered[m.selectIdx]
 			m.viewMode = ViewNormal
 
 			return m, m.execIntoPod(m.execNamespace, m.execPodName, container)
@@ -1222,7 +1420,12 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 		m.viewMode = ViewNormal
 	case "esc":
-		m.viewMode = ViewNormal
+		if m.switchFilter != "" {
+			m.switchFilter = ""
+			m.applySwitchFilter(m.execContainers)
+		} else {
+			m.viewMode = ViewNormal
+		}
 	}
 
 	return m, nil
