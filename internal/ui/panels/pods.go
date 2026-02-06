@@ -21,6 +21,7 @@ type PodsPanel struct {
 	styles   *theme.Styles
 	pods     []corev1.Pod
 	filtered []corev1.Pod
+	metrics  map[string]PodMetrics
 }
 
 func NewPodsPanel(client *k8s.Client, styles *theme.Styles) *PodsPanel {
@@ -99,6 +100,11 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 
 		return p, nil
 
+	case PodMetricsMsg:
+		p.metrics = msg.Metrics
+
+		return p, nil
+
 	case RefreshMsg:
 		if msg.PanelName == p.Title() {
 			return p, p.Refresh()
@@ -156,18 +162,50 @@ func (p *PodsPanel) View() string {
 }
 
 func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
-	name := utils.Truncate(pod.Name, p.width-15)
 	status := k8s.GetPodStatus(&pod)
+
+	// Check if we have metrics for this pod
+	metricsKey := pod.Namespace + "/" + pod.Name
+	hasMetrics := false
+
+	var cpuStr, memStr string
+
+	if m, ok := p.metrics[metricsKey]; ok {
+		hasMetrics = true
+		cpuStr = utils.FormatCPU(m.CPU)
+		memStr = utils.FormatMemory(m.Memory)
+	}
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	// Pad and add status
-	line = utils.PadRight(line, p.width-12)
+	// Calculate available space for name based on what we need to show
+	// Status: ~10 chars, CPU: ~6 chars, Memory: ~6 chars
+	nameWidth := p.width - 15
+
+	if hasMetrics {
+		nameWidth = p.width - 28
+	}
+
+	if nameWidth < 10 {
+		nameWidth = 10
+	}
+
+	line += utils.Truncate(pod.Name, nameWidth)
+
+	// Pad based on whether we show metrics
+	if hasMetrics {
+		line = utils.PadRight(line, p.width-25)
+		line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))
+		line += " " + p.styles.Muted.Render(utils.PadLeft(memStr, 6))
+	} else {
+		line = utils.PadRight(line, p.width-12)
+	}
+
 	statusStyle := p.styles.GetStatusStyle(status)
 	line += " " + statusStyle.Render(utils.Truncate(status, 10))
 
@@ -221,6 +259,22 @@ func (p *PodsPanel) DetailView(width, height int) string {
 	if p.allNs {
 		b.WriteString(p.styles.DetailLabel.Render("Namespace:"))
 		b.WriteString(p.styles.DetailValue.Render(pod.Namespace))
+		b.WriteString("\n")
+	}
+
+	// Show metrics if available
+	metricsKey := pod.Namespace + "/" + pod.Name
+	if m, ok := p.metrics[metricsKey]; ok {
+		b.WriteString("\n")
+		b.WriteString(p.styles.DetailTitle.Render("Resource Usage:"))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("CPU:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatCPU(m.CPU)))
+		b.WriteString("\n")
+
+		b.WriteString(p.styles.DetailLabel.Render("Memory:"))
+		b.WriteString(p.styles.DetailValue.Render(utils.FormatMemory(m.Memory)))
 		b.WriteString("\n")
 	}
 

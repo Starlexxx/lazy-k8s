@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
@@ -50,6 +51,12 @@ const (
 
 // borderLines is the number of lines used by panel borders (top + bottom).
 const borderLines = 2
+
+// metricsRefreshInterval is how often to fetch resource metrics from the metrics-server.
+const metricsRefreshInterval = 10 * time.Second
+
+// metricsTickMsg triggers a metrics refresh.
+type metricsTickMsg time.Time
 
 type Model struct {
 	// Core dependencies
@@ -102,6 +109,9 @@ type Model struct {
 	execContainers []string
 	execPodName    string
 	execNamespace  string
+
+	// Metrics
+	metricsClient *k8s.MetricsClient
 }
 
 func NewModel(client *k8s.Client, cfg *config.Config) *Model {
@@ -126,6 +136,12 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.logView = components.NewLogViewer(styles)
 	m.search = components.NewSearch(styles)
 	m.input = components.NewInput(styles)
+
+	// Initialize metrics client (optional - may fail if metrics-server not installed)
+	metricsClient, err := client.NewMetricsClient()
+	if err == nil {
+		m.metricsClient = metricsClient
+	}
 
 	// Initialize panels based on config
 	m.initPanels()
@@ -189,6 +205,11 @@ func (m *Model) Init() tea.Cmd {
 	// Initialize all panels
 	for _, panel := range m.panels {
 		cmds = append(cmds, panel.Init())
+	}
+
+	// Start metrics ticker if metrics client is available
+	if m.metricsClient != nil {
+		cmds = append(cmds, m.fetchMetrics(), m.metricsTickCmd())
 	}
 
 	return tea.Batch(cmds...)
@@ -440,6 +461,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.SetMessage(m.lastStatus)
 
 		return m, m.refreshAllPanels()
+
+	case metricsTickMsg:
+		// Schedule next tick and fetch metrics
+		return m, tea.Batch(m.metricsTickCmd(), m.fetchMetrics())
+
+	case metricsLoadedMsg:
+		// Dispatch metrics to pods and nodes panels
+		var cmds []tea.Cmd
+
+		for _, panel := range m.panels {
+			if panel.Title() == "Pods" {
+				_, cmd := panel.Update(panels.PodMetricsMsg{Metrics: msg.podMetrics})
+				cmds = append(cmds, cmd)
+			} else if panel.Title() == "Nodes" {
+				_, cmd := panel.Update(panels.NodeMetricsMsg{Metrics: msg.nodeMetrics})
+				cmds = append(cmds, cmd)
+			}
+		}
+
+		return m, tea.Batch(cmds...)
 
 	case components.InputSubmitMsg:
 		m.viewMode = ViewNormal
@@ -1598,4 +1639,78 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 
 func newKubectlCmd(args ...string) *exec.Cmd {
 	return exec.Command("kubectl", args...) //nolint:noctx
+}
+
+// metricsTickCmd returns a command that triggers a metrics refresh after an interval.
+func (m *Model) metricsTickCmd() tea.Cmd {
+	return tea.Tick(metricsRefreshInterval, func(t time.Time) tea.Msg {
+		return metricsTickMsg(t)
+	})
+}
+
+// fetchMetrics fetches pod and node metrics from the metrics-server.
+func (m *Model) fetchMetrics() tea.Cmd {
+	if m.metricsClient == nil {
+		return nil
+	}
+
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		// Fetch pod metrics
+		var podMetrics map[string]panels.PodMetrics
+
+		if m.showAllNs {
+			k8sMetrics, _ := m.metricsClient.GetAllPodMetrics(ctx)
+			podMetrics = convertPodMetrics(k8sMetrics)
+		} else {
+			k8sMetrics, _ := m.metricsClient.GetPodMetrics(ctx, m.k8sClient.CurrentNamespace())
+			podMetrics = convertPodMetrics(k8sMetrics)
+		}
+
+		// Fetch node metrics
+		k8sNodeMetrics, _ := m.metricsClient.GetNodeMetrics(ctx)
+		nodeMetrics := convertNodeMetrics(k8sNodeMetrics)
+
+		// Return both metrics in a batch
+		return metricsLoadedMsg{
+			podMetrics:  podMetrics,
+			nodeMetrics: nodeMetrics,
+		}
+	}
+}
+
+// metricsLoadedMsg carries both pod and node metrics.
+type metricsLoadedMsg struct {
+	podMetrics  map[string]panels.PodMetrics
+	nodeMetrics map[string]panels.NodeMetrics
+}
+
+// convertPodMetrics converts k8s.PodMetrics to panels.PodMetrics.
+func convertPodMetrics(k8sMetrics map[string]k8s.PodMetrics) map[string]panels.PodMetrics {
+	result := make(map[string]panels.PodMetrics, len(k8sMetrics))
+	for key, m := range k8sMetrics {
+		result[key] = panels.PodMetrics{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+			CPU:       m.CPU,
+			Memory:    m.Memory,
+		}
+	}
+
+	return result
+}
+
+// convertNodeMetrics converts k8s.NodeMetrics to panels.NodeMetrics.
+func convertNodeMetrics(k8sMetrics map[string]k8s.NodeMetrics) map[string]panels.NodeMetrics {
+	result := make(map[string]panels.NodeMetrics, len(k8sMetrics))
+	for key, m := range k8sMetrics {
+		result[key] = panels.NodeMetrics{
+			Name:   m.Name,
+			CPU:    m.CPU,
+			Memory: m.Memory,
+		}
+	}
+
+	return result
 }
