@@ -62,7 +62,6 @@ func (c *Client) DeleteCronJob(ctx context.Context, namespace, name string) erro
 	return c.clientset.BatchV1().CronJobs(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-// TriggerCronJob creates a Job from a CronJob spec (manual trigger).
 func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*batchv1.Job, error) {
 	if namespace == "" {
 		namespace = c.namespace
@@ -73,17 +72,16 @@ func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*b
 		return nil, fmt.Errorf("failed to get cronjob: %w", err)
 	}
 
-	// Create a Job from the CronJob spec
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			// Generate unique name based on cronjob name and timestamp
 			GenerateName: cronJob.Name + "-manual-",
 			Namespace:    namespace,
 			Labels:       cronJob.Spec.JobTemplate.Labels,
 			Annotations: map[string]string{
 				"cronjob.kubernetes.io/instantiate": "manual",
 			},
-			// Set owner reference to the CronJob
+			// Owner reference ensures garbage collection when the CronJob is deleted
+			// and lets the CronJob controller count this in its active jobs list.
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: "batch/v1",
@@ -99,7 +97,6 @@ func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*b
 	return c.clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 }
 
-// SuspendCronJob sets the suspend field on a CronJob.
 func (c *Client) SuspendCronJob(ctx context.Context, namespace, name string, suspend bool) error {
 	if namespace == "" {
 		namespace = c.namespace
@@ -114,7 +111,6 @@ func (c *Client) SuspendCronJob(ctx context.Context, namespace, name string, sus
 	return err
 }
 
-// GetCronJobStatus returns a status string for the cronjob.
 func GetCronJobStatus(cj *batchv1.CronJob) string {
 	if cj.Spec.Suspend != nil && *cj.Spec.Suspend {
 		return "Suspended"
@@ -123,7 +119,6 @@ func GetCronJobStatus(cj *batchv1.CronJob) string {
 	return "Active"
 }
 
-// GetCronJobLastSchedule returns the last schedule time as a formatted string.
 func GetCronJobLastSchedule(cj *batchv1.CronJob) string {
 	if cj.Status.LastScheduleTime == nil {
 		return "Never"
@@ -132,7 +127,6 @@ func GetCronJobLastSchedule(cj *batchv1.CronJob) string {
 	return cj.Status.LastScheduleTime.Format("2006-01-02 15:04:05")
 }
 
-// GetCronJobActiveJobs returns the number of active jobs.
 func GetCronJobActiveJobs(cj *batchv1.CronJob) int {
 	return len(cj.Status.Active)
 }

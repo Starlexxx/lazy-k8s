@@ -138,7 +138,6 @@ func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string 
 
 	line = utils.PadRight(line, p.width-10)
 
-	// Color based on event type
 	typeStyle := p.styles.StatusRunning
 	if eventType == "Warning" {
 		typeStyle = p.styles.StatusWarning
@@ -166,7 +165,6 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Event"))
 	b.WriteString("\n\n")
 
-	// Type with color
 	typeStyle := p.styles.StatusRunning
 	if event.Type == "Warning" {
 		typeStyle = p.styles.StatusWarning
@@ -180,7 +178,6 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailValue.Render(event.Reason))
 	b.WriteString("\n")
 
-	// Object
 	b.WriteString(p.styles.DetailLabel.Render("Object:"))
 	b.WriteString(
 		p.styles.DetailValue.Render(
@@ -189,7 +186,6 @@ func (p *EventsPanel) DetailView(width, height int) string {
 	)
 	b.WriteString("\n")
 
-	// Timestamps
 	lastSeen := event.LastTimestamp.Time
 	if lastSeen.IsZero() {
 		lastSeen = event.EventTime.Time
@@ -216,7 +212,6 @@ func (p *EventsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Source
 	if event.Source.Component != "" {
 		b.WriteString(p.styles.DetailLabel.Render("Source:"))
 
@@ -229,12 +224,10 @@ func (p *EventsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Message
 	b.WriteString("\n")
 	b.WriteString(p.styles.DetailTitle.Render("Message:"))
 	b.WriteString("\n")
 
-	// Wrap message
 	wrapped := utils.WrapText(event.Message, width-4)
 	for _, line := range wrapped {
 		b.WriteString("  " + line + "\n")

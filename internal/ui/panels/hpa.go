@@ -242,7 +242,6 @@ func (p *HPAPanel) DetailView(width, height int) string {
 			case autoscalingv2.ObjectMetricSourceType,
 				autoscalingv2.PodsMetricSourceType,
 				autoscalingv2.ContainerResourceMetricSourceType:
-				// Additional metric types
 			}
 		}
 	}

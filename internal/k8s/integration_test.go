@@ -5,10 +5,11 @@
 // when no cluster is available.
 //
 // Prerequisites:
-//   kind create cluster --name lazy-k8s-test
-//   kubectl create namespace test-ns
-//   kubectl create deployment nginx-test --image=nginx:alpine
-//   kubectl create deployment app-test --image=busybox --replicas=2 -n test-ns -- sleep 3600
+//
+//	kind create cluster --name lazy-k8s-test
+//	kubectl create namespace test-ns
+//	kubectl create deployment nginx-test --image=nginx:alpine
+//	kubectl create deployment app-test --image=busybox --replicas=2 -n test-ns -- sleep 3600
 package k8s
 
 import (

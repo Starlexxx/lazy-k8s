@@ -97,7 +97,6 @@ func (t *Toast) View(width int) string {
 
 	content := style.Render(icon + t.message)
 
-	// Position at bottom-right
 	return lipgloss.Place(width, 1, lipgloss.Right, lipgloss.Bottom, content)
 }
 

@@ -157,7 +157,6 @@ func (p *ConfigMapsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Data keys
 	if len(cm.Data) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Data:"))
@@ -169,7 +168,6 @@ func (p *ConfigMapsPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Binary data keys
 	if len(cm.BinaryData) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Binary Data:"))

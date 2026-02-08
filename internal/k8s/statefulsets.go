@@ -91,7 +91,8 @@ func (c *Client) RestartStatefulSet(ctx context.Context, namespace, name string)
 		namespace = c.namespace
 	}
 
-	// Patch statefulset with a restart annotation to trigger rolling update
+	// Kubernetes has no native restart API; a timestamp annotation forces the
+	// controller to perform a rolling update (matches kubectl rollout restart).
 	restartedAt := metav1.Now().Format("2006-01-02T15:04:05Z")
 	patchFmt := `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`
 	patch := fmt.Appendf(nil, patchFmt, restartedAt)
@@ -103,7 +104,6 @@ func (c *Client) RestartStatefulSet(ctx context.Context, namespace, name string)
 	return err
 }
 
-// GetStatefulSetReadyCount returns ready/desired replicas as a string.
 func GetStatefulSetReadyCount(sts *appsv1.StatefulSet) string {
 	desired := int32(0)
 	if sts.Spec.Replicas != nil {
@@ -113,7 +113,6 @@ func GetStatefulSetReadyCount(sts *appsv1.StatefulSet) string {
 	return fmt.Sprintf("%d/%d", sts.Status.ReadyReplicas, desired)
 }
 
-// GetStatefulSetImages returns container images from the statefulset spec.
 func GetStatefulSetImages(sts *appsv1.StatefulSet) []string {
 	images := make([]string, 0)
 	for _, container := range sts.Spec.Template.Spec.Containers {

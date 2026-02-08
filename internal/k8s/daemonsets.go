@@ -67,7 +67,8 @@ func (c *Client) RestartDaemonSet(ctx context.Context, namespace, name string) e
 		namespace = c.namespace
 	}
 
-	// Patch daemonset with a restart annotation to trigger rolling update
+	// Kubernetes has no native restart API; a timestamp annotation forces the
+	// controller to perform a rolling update (matches kubectl rollout restart).
 	restartedAt := metav1.Now().Format("2006-01-02T15:04:05Z")
 	patchFmt := `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`
 	patch := fmt.Appendf(nil, patchFmt, restartedAt)
@@ -79,12 +80,10 @@ func (c *Client) RestartDaemonSet(ctx context.Context, namespace, name string) e
 	return err
 }
 
-// GetDaemonSetReadyCount returns ready/desired nodes as a string.
 func GetDaemonSetReadyCount(ds *appsv1.DaemonSet) string {
 	return fmt.Sprintf("%d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 }
 
-// GetDaemonSetImages returns container images from the daemonset spec.
 func GetDaemonSetImages(ds *appsv1.DaemonSet) []string {
 	images := make([]string, 0)
 	for _, container := range ds.Spec.Template.Spec.Containers {

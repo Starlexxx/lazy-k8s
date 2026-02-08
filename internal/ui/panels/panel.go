@@ -8,134 +8,108 @@ import (
 
 var ErrNoSelection = errors.New("no item selected")
 
-// RefreshMsg is sent to request a panel refresh.
 type RefreshMsg struct {
 	PanelName string
 }
 
-// ErrorMsg is sent when an error occurs.
 type ErrorMsg struct {
 	Error error
 }
 
-// StatusMsg is sent to display a status message.
 type StatusMsg struct {
 	Message string
 }
 
-// RefreshAllPanelsMsg is sent to trigger a refresh of all panels.
-// Used after mutating operations like scale, restart, etc.
+// Used after mutating operations (scale, restart, etc.) to refresh all panels.
 type RefreshAllPanelsMsg struct{}
 
-// StatusWithRefreshMsg combines a status message with a refresh signal.
-// When processed, it displays the status and triggers a full refresh.
+// Displays a status notification and triggers a full panel refresh when processed.
 type StatusWithRefreshMsg struct {
 	Message string
 }
 
-// ScaleRequestMsg is sent when user requests to scale a deployment.
 type ScaleRequestMsg struct {
 	DeploymentName  string
 	Namespace       string
 	CurrentReplicas int32
 }
 
-// RollbackRequestMsg is sent when user requests to rollback a deployment.
 type RollbackRequestMsg struct {
 	DeploymentName string
 	Namespace      string
 }
 
-// PortForwardRequestMsg is sent when user requests to port-forward to a pod.
 type PortForwardRequestMsg struct {
 	PodName   string
 	Namespace string
 	Ports     []int32
 }
 
-// ExecRequestMsg is sent when user requests to exec into a pod.
 type ExecRequestMsg struct {
 	PodName    string
 	Namespace  string
 	Containers []string
 }
 
-// ScaleStatefulSetRequestMsg is sent when user requests to scale a statefulset.
 type ScaleStatefulSetRequestMsg struct {
 	StatefulSetName string
 	Namespace       string
 	CurrentReplicas int32
 }
 
-// EditHPAMinReplicasRequestMsg is sent when user requests to edit HPA min replicas.
 type EditHPAMinReplicasRequestMsg struct {
 	HPAName     string
 	Namespace   string
 	MinReplicas int32
 }
 
-// EditHPAMaxReplicasRequestMsg is sent when user requests to edit HPA max replicas.
 type EditHPAMaxReplicasRequestMsg struct {
 	HPAName     string
 	Namespace   string
 	MaxReplicas int32
 }
 
-// Panel is the interface that all resource panels must implement.
+type PodMetricsMsg struct {
+	Metrics map[string]PodMetrics
+}
+
+type PodMetrics struct {
+	Name      string
+	Namespace string
+	CPU       int64 // in millicores
+	Memory    int64 // in bytes
+}
+
+type NodeMetricsMsg struct {
+	Metrics map[string]NodeMetrics
+}
+
+type NodeMetrics struct {
+	Name   string
+	CPU    int64 // in millicores
+	Memory int64 // in bytes
+}
+
 type Panel interface {
-	// Init initializes the panel and returns initial commands
 	Init() tea.Cmd
-
-	// Update handles messages and returns updated panel and commands
 	Update(msg tea.Msg) (Panel, tea.Cmd)
-
-	// View renders the panel's list view
 	View() string
-
-	// DetailView renders the detail view for the selected item
 	DetailView(width, height int) string
-
-	// Title returns the panel's title
 	Title() string
-
-	// ShortcutKey returns the keyboard shortcut for this panel
 	ShortcutKey() string
-
-	// SetSize sets the panel dimensions
 	SetSize(width, height int)
-
-	// SetFocused sets whether this panel is focused
 	SetFocused(focused bool)
-
-	// IsFocused returns whether this panel is focused
 	IsFocused() bool
-
-	// SelectedItem returns the currently selected item
 	SelectedItem() interface{}
-
-	// SelectedName returns the name of the selected item
 	SelectedName() string
-
-	// Refresh triggers a data refresh
 	Refresh() tea.Cmd
-
-	// Delete deletes the selected item
 	Delete() tea.Cmd
-
-	// SetFilter sets the search/filter query
 	SetFilter(query string)
-
-	// SetAllNamespaces sets whether to show all namespaces
 	SetAllNamespaces(all bool)
-
-	// GetSelectedYAML returns the YAML representation of the selected item
 	GetSelectedYAML() (string, error)
-
-	// GetSelectedDescribe returns the describe output for the selected item
 	GetSelectedDescribe() (string, error)
 }
 
-// BasePanel provides common functionality for panels.
 type BasePanel struct {
 	title       string
 	shortcutKey string

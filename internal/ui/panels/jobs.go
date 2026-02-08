@@ -196,7 +196,6 @@ func (p *JobsPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Timestamps
 	if job.Status.StartTime != nil {
 		b.WriteString(p.styles.DetailLabel.Render("Start Time:"))
 		b.WriteString(

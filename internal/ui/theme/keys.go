@@ -54,7 +54,6 @@ type KeyMap struct {
 
 func NewKeyMap() *KeyMap {
 	return &KeyMap{
-		// Navigation
 		Up: key.NewBinding(
 			key.WithKeys("k", "up"),
 			key.WithHelp("↑/k", "up"),
@@ -96,7 +95,6 @@ func NewKeyMap() *KeyMap {
 			key.WithHelp("esc", "back/cancel"),
 		),
 
-		// Panel shortcuts
 		Panel1: key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "panel 1")),
 		Panel2: key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "panel 2")),
 		Panel3: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "panel 3")),
@@ -107,7 +105,6 @@ func NewKeyMap() *KeyMap {
 		Panel8: key.NewBinding(key.WithKeys("8"), key.WithHelp("8", "panel 8")),
 		Panel9: key.NewBinding(key.WithKeys("9"), key.WithHelp("9", "panel 9")),
 
-		// Actions
 		Quit: key.NewBinding(
 			key.WithKeys("q", "ctrl+c"),
 			key.WithHelp("q", "quit"),
@@ -195,12 +192,10 @@ func NewKeyMap() *KeyMap {
 	}
 }
 
-// ShortHelp returns key bindings for short help view.
 func (k KeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.Help, k.Quit, k.NextPanel, k.Search}
 }
 
-// FullHelp returns key bindings for the full help view.
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},

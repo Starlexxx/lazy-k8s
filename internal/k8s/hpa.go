@@ -74,7 +74,6 @@ func (c *Client) DeleteHPA(ctx context.Context, namespace, name string) error {
 		Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-// UpdateHPAMinReplicas updates the minimum replicas for an HPA.
 func (c *Client) UpdateHPAMinReplicas(
 	ctx context.Context,
 	namespace, name string,
@@ -93,7 +92,6 @@ func (c *Client) UpdateHPAMinReplicas(
 	return err
 }
 
-// UpdateHPAMaxReplicas updates the maximum replicas for an HPA.
 func (c *Client) UpdateHPAMaxReplicas(
 	ctx context.Context,
 	namespace, name string,
@@ -112,8 +110,8 @@ func (c *Client) UpdateHPAMaxReplicas(
 	return err
 }
 
-// GetHPAReplicaCount returns current/min/max replicas as a string.
 func GetHPAReplicaCount(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
+	// Defaults to 1 if unset, per Kubernetes convention
 	minReplicas := int32(1)
 	if hpa.Spec.MinReplicas != nil {
 		minReplicas = *hpa.Spec.MinReplicas
@@ -126,7 +124,6 @@ func GetHPAReplicaCount(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
 	)
 }
 
-// GetHPATargetRef returns the target reference as a string.
 func GetHPATargetRef(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
 	return fmt.Sprintf("%s/%s",
 		hpa.Spec.ScaleTargetRef.Kind,
@@ -134,7 +131,6 @@ func GetHPATargetRef(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
 	)
 }
 
-// GetHPAMetricsSummary returns a summary of configured metrics.
 func GetHPAMetricsSummary(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
 	if len(hpa.Spec.Metrics) == 0 {
 		return "No metrics configured"

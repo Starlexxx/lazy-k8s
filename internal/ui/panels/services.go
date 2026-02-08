@@ -70,7 +70,6 @@ func (p *ServicesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *ServicesPanel) View() string {
 	var b strings.Builder
 
-	// Title
 	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
@@ -144,7 +143,6 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 	b.WriteString(p.styles.DetailTitle.Render("Service: " + svc.Name))
 	b.WriteString("\n\n")
 
-	// Basic info
 	b.WriteString(p.styles.DetailLabel.Render("Type:"))
 	b.WriteString(p.styles.DetailValue.Render(string(svc.Spec.Type)))
 	b.WriteString("\n")
@@ -175,7 +173,6 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 		b.WriteString("\n")
 	}
 
-	// Selector
 	if len(svc.Spec.Selector) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Selector:"))
@@ -186,7 +183,6 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Ports detail
 	if len(svc.Spec.Ports) > 0 {
 		b.WriteString("\n")
 		b.WriteString(p.styles.DetailTitle.Render("Port Details:"))
@@ -213,7 +209,6 @@ func (p *ServicesPanel) DetailView(width, height int) string {
 		}
 	}
 
-	// Key hints
 	b.WriteString("\n")
 	b.WriteString(p.styles.Muted.Render("[p]ort-forward [d]escribe [y]aml [D]elete"))
 

@@ -83,7 +83,6 @@ func (l *LogViewer) Start(client *k8s.Client, namespace, pod, container string) 
 					// Send error but don't stop
 					continue
 				}
-				// Use tea.Program.Send would be ideal, but we return a cmd instead
 			}
 		}()
 
@@ -231,12 +230,10 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			newLines := strings.Split(msg.Line, "\n")
 			l.lines = append(l.lines, newLines...)
 
-			// Trim if too many lines
 			if len(l.lines) > l.maxLines {
 				l.lines = l.lines[len(l.lines)-l.maxLines:]
 			}
 
-			// Auto-scroll if following
 			if l.follow {
 				maxOffset := len(l.lines) - l.height + 6
 				if maxOffset < 0 {
@@ -247,7 +244,6 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			}
 		}
 
-		// Continue reading logs
 		return l, l.tickCmd()
 	}
 
@@ -292,7 +288,6 @@ func (l *LogViewer) View(width, height int) string {
 
 	var b strings.Builder
 
-	// Title bar
 	title := l.styles.ModalTitle.Render("Logs: " + l.pod)
 
 	followIndicator := ""
@@ -401,7 +396,6 @@ func (l *LogViewer) View(width, height int) string {
 }
 
 func (l *LogViewer) highlightLogLine(line string) string {
-	// Highlight timestamps
 	timestampStyle := l.styles.Muted
 	errorStyle := lipgloss.NewStyle().Foreground(l.styles.Error)
 	warnStyle := lipgloss.NewStyle().Foreground(l.styles.Warning)
@@ -409,7 +403,6 @@ func (l *LogViewer) highlightLogLine(line string) string {
 
 	lower := strings.ToLower(line)
 
-	// Check for log levels
 	if strings.Contains(lower, "error") || strings.Contains(lower, "fatal") ||
 		strings.Contains(lower, "panic") {
 		return errorStyle.Render(line)

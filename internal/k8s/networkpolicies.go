@@ -76,17 +76,14 @@ func (c *Client) DeleteNetworkPolicy(ctx context.Context, namespace, name string
 		Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-// GetNetworkPolicyIngressRuleCount returns the number of ingress rules.
 func GetNetworkPolicyIngressRuleCount(np *networkingv1.NetworkPolicy) int {
 	return len(np.Spec.Ingress)
 }
 
-// GetNetworkPolicyEgressRuleCount returns the number of egress rules.
 func GetNetworkPolicyEgressRuleCount(np *networkingv1.NetworkPolicy) int {
 	return len(np.Spec.Egress)
 }
 
-// GetNetworkPolicyPodSelectorString returns the pod selector as a string.
 func GetNetworkPolicyPodSelectorString(np *networkingv1.NetworkPolicy) string {
 	selector := np.Spec.PodSelector
 	if len(selector.MatchLabels) == 0 && len(selector.MatchExpressions) == 0 {
@@ -96,8 +93,8 @@ func GetNetworkPolicyPodSelectorString(np *networkingv1.NetworkPolicy) string {
 	return metav1.FormatLabelSelector(&selector)
 }
 
-// GetNetworkPolicyPolicyTypes returns the policy types as a string.
 func GetNetworkPolicyPolicyTypes(np *networkingv1.NetworkPolicy) string {
+	// Defaults to "Ingress" when no policy types are specified, matching K8s implicit behavior.
 	if len(np.Spec.PolicyTypes) == 0 {
 		return "Ingress"
 	}
@@ -115,7 +112,6 @@ func GetNetworkPolicyPolicyTypes(np *networkingv1.NetworkPolicy) string {
 	return types
 }
 
-// GetNetworkPolicyRuleSummary returns a summary of ingress/egress rules.
 func GetNetworkPolicyRuleSummary(np *networkingv1.NetworkPolicy) string {
 	return fmt.Sprintf("Ingress: %d, Egress: %d",
 		len(np.Spec.Ingress),

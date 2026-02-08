@@ -66,18 +66,16 @@ func (c *Client) DeleteServiceAccount(ctx context.Context, namespace, name strin
 	return c.clientset.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-// GetServiceAccountSecretCount returns the number of secrets associated with the SA.
 func GetServiceAccountSecretCount(sa *corev1.ServiceAccount) int {
 	return len(sa.Secrets)
 }
 
-// GetServiceAccountImagePullSecretCount returns the number of image pull secrets.
 func GetServiceAccountImagePullSecretCount(sa *corev1.ServiceAccount) int {
 	return len(sa.ImagePullSecrets)
 }
 
-// GetServiceAccountAutoMount returns whether automount is enabled.
 func GetServiceAccountAutoMount(sa *corev1.ServiceAccount) string {
+	// Returns "default" when nil (inherits the cluster-wide setting)
 	if sa.AutomountServiceAccountToken == nil {
 		return "default"
 	}
@@ -89,7 +87,6 @@ func GetServiceAccountAutoMount(sa *corev1.ServiceAccount) string {
 	return "false"
 }
 
-// GetServiceAccountSecretsSummary returns a summary of secrets.
 func GetServiceAccountSecretsSummary(sa *corev1.ServiceAccount) string {
 	return fmt.Sprintf("Secrets: %d, ImagePullSecrets: %d",
 		len(sa.Secrets),
