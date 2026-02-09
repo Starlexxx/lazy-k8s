@@ -35,6 +35,20 @@ archives:
           - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
+brews:
+  - repository:
+      owner: Starlexxx
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    name: lazy-k8s
+    homepage: "https://github.com/Starlexxx/lazy-k8s"
+    description: "A lazygit-style terminal UI for Kubernetes"
+    license: "MIT"
+    install: |
+      bin.install "lazy-k8s"
+    test: |
+      system "#{bin}/lazy-k8s", "--version"
+
 checksum:
   name_template: "checksums.txt"
 

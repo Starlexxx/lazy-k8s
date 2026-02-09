@@ -40,3 +40,4 @@ dist/
 # Markdown files in root (except README)
 /*.md
 !README.md
+!LICENSE.md
