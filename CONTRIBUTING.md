@@ -1,4 +1,4 @@
-ontributing to lazy-k8s
+# Contributing to lazy-k8s
 
 Thanks for your interest in contributing to lazy-k8s! Whether it’s a bug report, feature request, or a pull request, your help is welcome.
 
