@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/lazyk8s/lazy-k8s/internal/app"
-	"github.com/lazyk8s/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/app"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
 )
 
 var version = "dev"

@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/lazyk8s/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
 )
 
 // TestViewMode tests view mode constants.

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lazyk8s/lazy-k8s/internal/config"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
 )
 
 func createTestStyles() *theme.Styles {

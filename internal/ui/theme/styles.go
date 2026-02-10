@@ -3,7 +3,7 @@ package theme
 import (
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lazyk8s/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
 )
 
 type Styles struct {

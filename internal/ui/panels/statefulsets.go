@@ -10,9 +10,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/lazyk8s/lazy-k8s/internal/k8s"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
-	"github.com/lazyk8s/lazy-k8s/internal/utils"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
+	"github.com/Starlexxx/lazy-k8s/internal/utils"
 )
 
 type StatefulSetsPanel struct {

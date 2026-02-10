@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
 )
 
 type ToastType int
