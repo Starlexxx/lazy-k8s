@@ -5,9 +5,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/lazyk8s/lazy-k8s/internal/config"
-	"github.com/lazyk8s/lazy-k8s/internal/k8s"
-	"github.com/lazyk8s/lazy-k8s/internal/ui"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/ui"
 )
 
 type App struct {

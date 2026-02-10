@@ -15,11 +15,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lazyk8s/lazy-k8s/internal/config"
-	"github.com/lazyk8s/lazy-k8s/internal/k8s"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/components"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/panels"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/components"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/panels"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
 )
 
 var (

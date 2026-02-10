@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lazyk8s/lazy-k8s/internal/config"
-	"github.com/lazyk8s/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 )
 
 // getTestK8sClient creates a client for integration tests.

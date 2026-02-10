@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lazyk8s/lazy-k8s/internal/k8s"
-	"github.com/lazyk8s/lazy-k8s/internal/ui/theme"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
 )
 
 type LogLineMsg struct {
