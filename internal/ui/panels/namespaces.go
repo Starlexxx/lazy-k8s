@@ -56,7 +56,9 @@ func (p *NamespacesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 				p.client.SetNamespace(ns.Name)
 
 				return p, func() tea.Msg {
-					return StatusMsg{Message: fmt.Sprintf("Switched to namespace: %s", ns.Name)}
+					return StatusWithRefreshMsg{
+						Message: fmt.Sprintf("Switched to namespace: %s", ns.Name),
+					}
 				}
 			}
 		}

@@ -342,6 +342,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.startNamespaceSwitch()
 
 		case key.Matches(msg, m.keys.Refresh):
+			m.statusBar.SetMessage("Refreshed all panels")
+
 			return m, m.refreshAllPanels()
 
 		case key.Matches(msg, m.keys.AllNamespace):
@@ -441,6 +443,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case panels.StatusWithRefreshMsg:
 		m.lastStatus = msg.Message
 		m.statusBar.SetMessage(m.lastStatus)
+		m.header.SetNamespace(m.k8sClient.CurrentNamespace())
 
 		return m, m.refreshAllPanels()
 
@@ -1375,8 +1378,6 @@ func (m *Model) refreshAllPanels() tea.Cmd {
 	for _, panel := range m.panels {
 		cmds = append(cmds, panel.Refresh())
 	}
-
-	m.statusBar.SetMessage("Refreshed all panels")
 
 	return tea.Batch(cmds...)
 }
