@@ -111,19 +111,55 @@ func (p *PVCPanel) View() string {
 }
 
 func (p *PVCPanel) renderPVCLine(pvc corev1.PersistentVolumeClaim, selected bool) string {
-	name := utils.Truncate(pvc.Name, p.width-15)
 	status := string(pvc.Status.Phase)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-12)
-	statusStyle := p.styles.GetStatusStyle(status)
-	line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	if p.width > 80 {
+		reserved := 35
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(pvc.Name, nameW), nameW,
+		)
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(
+			utils.PadRight(utils.Truncate(status, 10), 10),
+		)
+
+		if len(pvc.Status.Capacity) > 0 {
+			capacity := pvc.Status.Capacity[corev1.ResourceStorage]
+			line += " " + utils.PadRight(capacity.String(), 8)
+		} else {
+			line += " " + utils.PadRight("-", 8)
+		}
+
+		age := utils.FormatAgeFromMeta(pvc.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(pvc.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(pvc.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-12)
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

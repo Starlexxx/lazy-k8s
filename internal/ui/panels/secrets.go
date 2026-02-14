@@ -110,18 +110,43 @@ func (p *SecretsPanel) View() string {
 }
 
 func (p *SecretsPanel) renderSecretLine(secret corev1.Secret, selected bool) string {
-	name := utils.Truncate(secret.Name, p.width-15)
 	secretType := utils.Truncate(string(secret.Type), 12)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-14)
-	line += " " + secretType
+	if p.width > 80 {
+		reserved := 30
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(secret.Name, nameW), nameW,
+		)
+		line += " " + utils.PadRight(secretType, 12)
+
+		age := utils.FormatAgeFromMeta(secret.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(secret.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(secret.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-14)
+		line += " " + secretType
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

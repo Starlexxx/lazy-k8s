@@ -131,17 +131,7 @@ func (p *StatefulSetsPanel) View() string {
 }
 
 func (p *StatefulSetsPanel) renderStatefulSetLine(sts appsv1.StatefulSet, selected bool) string {
-	name := utils.Truncate(sts.Name, p.width-15)
 	ready := k8s.GetStatefulSetReadyCount(&sts)
-
-	var line string
-	if selected {
-		line = "> " + name
-	} else {
-		line = "  " + name
-	}
-
-	line = utils.PadRight(line, p.width-10)
 
 	readyStyle := p.styles.StatusRunning
 
@@ -154,7 +144,41 @@ func (p *StatefulSetsPanel) renderStatefulSetLine(sts appsv1.StatefulSet, select
 		readyStyle = p.styles.StatusPending
 	}
 
-	line += " " + readyStyle.Render(ready)
+	var line string
+	if selected {
+		line = "> "
+	} else {
+		line = "  "
+	}
+
+	if p.width > 80 {
+		reserved := 22
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(sts.Name, nameW), nameW,
+		)
+		line += " " + readyStyle.Render(utils.PadRight(ready, 7))
+
+		age := utils.FormatAgeFromMeta(sts.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(sts.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(sts.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-10)
+		line += " " + readyStyle.Render(ready)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)
