@@ -143,18 +143,48 @@ func (p *HPAPanel) View() string {
 }
 
 func (p *HPAPanel) renderHPALine(hpa autoscalingv2.HorizontalPodAutoscaler, selected bool) string {
-	name := utils.Truncate(hpa.Name, p.width-18)
 	replicas := k8s.GetHPAReplicaCount(&hpa)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-15)
-	line += " " + p.styles.StatusRunning.Render(replicas)
+	if p.width > 80 {
+		reserved := 35
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(hpa.Name, nameW), nameW,
+		)
+		line += " " + p.styles.StatusRunning.Render(
+			utils.PadRight(replicas, 12),
+		)
+
+		target := k8s.GetHPATargetRef(&hpa)
+		line += " " + utils.PadRight(utils.Truncate(target, 15), 15)
+
+		age := utils.FormatAgeFromMeta(hpa.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(hpa.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(hpa.Name, p.width-18)
+		line += name
+		line = utils.PadRight(line, p.width-15)
+		line += " " + p.styles.StatusRunning.Render(replicas)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

@@ -131,6 +131,14 @@ func (p *PodsPanel) View() string {
 		visibleHeight = 1
 	}
 
+	// Table header when wide enough for extra columns
+	if p.width > 80 {
+		b.WriteString(p.renderPodHeader())
+		b.WriteString("\n")
+
+		visibleHeight--
+	}
+
 	startIdx := 0
 	if p.cursor >= visibleHeight {
 		startIdx = p.cursor - visibleHeight + 1
@@ -156,6 +164,50 @@ func (p *PodsPanel) View() string {
 	return style.Width(p.width).Height(p.height).Render(b.String())
 }
 
+func (p *PodsPanel) renderPodHeader() string {
+	hasMetrics := len(p.metrics) > 0
+
+	header := "  " + utils.PadRight("NAME", p.podNameWidth(hasMetrics))
+
+	if hasMetrics {
+		header += " " + utils.PadLeft("CPU", 5)
+		header += " " + utils.PadLeft("MEM", 6)
+	}
+
+	header += " " + utils.PadRight("STATUS", 10)
+	header += " " + utils.PadRight("READY", 5)
+	header += " " + utils.PadRight("RESTARTS", 8)
+	header += " " + utils.PadRight("AGE", 8)
+
+	if p.width > 120 && p.allNs {
+		header += " " + utils.PadRight("NAMESPACE", 15)
+	}
+
+	return p.styles.TableHeader.Render(
+		utils.Truncate(header, p.width-2),
+	)
+}
+
+func (p *PodsPanel) podNameWidth(hasMetrics bool) int {
+	// Reserve space for: status(10) + ready(5) + restarts(8) + age(8) + padding
+	reserved := 38
+
+	if hasMetrics {
+		reserved += 13
+	}
+
+	if p.width > 120 && p.allNs {
+		reserved += 16
+	}
+
+	nameW := p.width - reserved
+	if nameW < 10 {
+		nameW = 10
+	}
+
+	return nameW
+}
+
 func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
 	status := k8s.GetPodStatus(&pod)
 
@@ -177,8 +229,14 @@ func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
 		line = "  "
 	}
 
-	// Calculate available space for name based on what we need to show
-	// Status: ~10 chars, CPU: ~6 chars, Memory: ~6 chars
+	// Wide mode: show extra columns (ready, restarts, age, namespace)
+	if p.width > 80 {
+		return p.renderPodLineWide(
+			pod, selected, hasMetrics, cpuStr, memStr, status,
+		)
+	}
+
+	// Narrow mode: name + optional metrics + status
 	nameWidth := p.width - 15
 
 	if hasMetrics {
@@ -201,6 +259,51 @@ func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
 
 	statusStyle := p.styles.GetStatusStyle(status)
 	line += " " + statusStyle.Render(utils.Truncate(status, 10))
+
+	if selected && p.focused {
+		return p.styles.ListItemFocused.Render(line)
+	} else if selected {
+		return p.styles.ListItemSelected.Render(line)
+	}
+
+	return p.styles.ListItem.Render(line)
+}
+
+func (p *PodsPanel) renderPodLineWide(
+	pod corev1.Pod,
+	selected, hasMetrics bool,
+	cpuStr, memStr, status string,
+) string {
+	var line string
+	if selected {
+		line = "> "
+	} else {
+		line = "  "
+	}
+
+	nameW := p.podNameWidth(hasMetrics)
+	line += utils.PadRight(utils.Truncate(pod.Name, nameW), nameW)
+
+	if hasMetrics {
+		line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))
+		line += " " + p.styles.Muted.Render(utils.PadLeft(memStr, 6))
+	}
+
+	statusStyle := p.styles.GetStatusStyle(status)
+	line += " " + statusStyle.Render(utils.PadRight(utils.Truncate(status, 10), 10))
+
+	ready := k8s.GetPodReadyCount(&pod)
+	line += " " + utils.PadRight(ready, 5)
+
+	restarts := fmt.Sprintf("%d", k8s.GetPodRestarts(&pod))
+	line += " " + utils.PadRight(restarts, 8)
+
+	age := utils.FormatAgeFromMeta(pod.CreationTimestamp)
+	line += " " + utils.PadRight(age, 8)
+
+	if p.width > 120 && p.allNs {
+		line += " " + utils.Truncate(pod.Namespace, 15)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

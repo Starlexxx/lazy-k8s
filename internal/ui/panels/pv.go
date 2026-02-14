@@ -111,19 +111,42 @@ func (p *PVPanel) View() string {
 }
 
 func (p *PVPanel) renderPVLine(pv corev1.PersistentVolume, selected bool) string {
-	name := utils.Truncate(pv.Name, p.width-15)
 	status := string(pv.Status.Phase)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-12)
-	statusStyle := p.styles.GetStatusStyle(status)
-	line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	if p.width > 80 {
+		nameW := p.width - 40
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(pv.Name, nameW), nameW,
+		)
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(
+			utils.PadRight(utils.Truncate(status, 10), 10),
+		)
+
+		capacity := pv.Spec.Capacity[corev1.ResourceStorage]
+		line += " " + utils.PadRight(capacity.String(), 8)
+
+		age := utils.FormatAgeFromMeta(pv.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+	} else {
+		name := utils.Truncate(pv.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-12)
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

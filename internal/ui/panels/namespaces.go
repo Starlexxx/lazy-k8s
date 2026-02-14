@@ -121,20 +121,38 @@ func (p *NamespacesPanel) View() string {
 }
 
 func (p *NamespacesPanel) renderNamespaceLine(ns corev1.Namespace, selected bool) string {
-	name := utils.Truncate(ns.Name, p.width-6)
 	status := string(ns.Status.Phase)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-10)
+	if p.width > 80 {
+		nameW := p.width - 25
+		if nameW < 10 {
+			nameW = 10
+		}
 
-	statusStyle := p.styles.GetStatusStyle(status)
-	line += " " + statusStyle.Render(status)
+		line += utils.PadRight(
+			utils.Truncate(ns.Name, nameW), nameW,
+		)
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(utils.PadRight(status, 8))
+
+		age := utils.FormatAgeFromMeta(ns.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+	} else {
+		name := utils.Truncate(ns.Name, p.width-6)
+		line += name
+		line = utils.PadRight(line, p.width-10)
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(status)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

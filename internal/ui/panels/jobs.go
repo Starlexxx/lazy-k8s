@@ -111,19 +111,48 @@ func (p *JobsPanel) View() string {
 }
 
 func (p *JobsPanel) renderJobLine(job batchv1.Job, selected bool) string {
-	name := utils.Truncate(job.Name, p.width-15)
 	status := p.getJobStatus(&job)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-12)
-	statusStyle := p.styles.GetStatusStyle(status)
-	line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	if p.width > 80 {
+		reserved := 28
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(job.Name, nameW), nameW,
+		)
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(
+			utils.PadRight(utils.Truncate(status, 10), 10),
+		)
+
+		age := utils.FormatAgeFromMeta(job.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(job.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(job.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-12)
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(utils.Truncate(status, 10))
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

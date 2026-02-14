@@ -110,18 +110,43 @@ func (p *ConfigMapsPanel) View() string {
 }
 
 func (p *ConfigMapsPanel) renderConfigMapLine(cm corev1.ConfigMap, selected bool) string {
-	name := utils.Truncate(cm.Name, p.width-10)
 	dataCount := fmt.Sprintf("%d", len(cm.Data))
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-6)
-	line += " " + dataCount
+	if p.width > 80 {
+		reserved := 22
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(cm.Name, nameW), nameW,
+		)
+		line += " " + utils.PadRight(dataCount, 5)
+
+		age := utils.FormatAgeFromMeta(cm.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(cm.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(cm.Name, p.width-10)
+		line += name
+		line = utils.PadRight(line, p.width-6)
+		line += " " + dataCount
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

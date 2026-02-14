@@ -114,24 +114,53 @@ func (p *CronJobsPanel) View() string {
 }
 
 func (p *CronJobsPanel) renderCronJobLine(cj batchv1.CronJob, selected bool) string {
-	name := utils.Truncate(cj.Name, p.width-15)
 	status := k8s.GetCronJobStatus(&cj)
-
-	var line string
-	if selected {
-		line = "> " + name
-	} else {
-		line = "  " + name
-	}
-
-	line = utils.PadRight(line, p.width-12)
 
 	statusStyle := p.styles.StatusRunning
 	if status == "Suspended" {
 		statusStyle = p.styles.StatusPending
 	}
 
-	line += " " + statusStyle.Render(status)
+	var line string
+	if selected {
+		line = "> "
+	} else {
+		line = "  "
+	}
+
+	if p.width > 80 {
+		reserved := 38
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(cj.Name, nameW), nameW,
+		)
+		line += " " + statusStyle.Render(
+			utils.PadRight(utils.Truncate(status, 10), 10),
+		)
+
+		schedule := utils.Truncate(cj.Spec.Schedule, 15)
+		line += " " + utils.PadRight(schedule, 15)
+
+		age := utils.FormatAgeFromMeta(cj.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(cj.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(cj.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-12)
+		line += " " + statusStyle.Render(status)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

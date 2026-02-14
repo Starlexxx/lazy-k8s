@@ -83,6 +83,7 @@ type Model struct {
 	lastError    string
 	lastStatus   string
 	showAllNs    bool
+	zoomed       bool
 	searchActive bool
 	searchQuery  string
 
@@ -286,6 +287,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fall through to normal key handling below
 		}
 
+		// Esc exits zoom when not in search mode
+		if m.zoomed && !m.searchActive && key.Matches(msg, m.keys.Back) {
+			m.zoomed = false
+			m.updatePanelSizes()
+
+			return m, nil
+		}
+
 		// Search mode
 		if m.searchActive {
 			if key.Matches(msg, m.keys.Back) {
@@ -322,6 +331,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.Search):
 			m.searchActive = true
 			m.search.Focus()
+
+			return m, nil
+
+		case key.Matches(msg, m.keys.Zoom):
+			m.zoomed = !m.zoomed
+			m.updatePanelSizes()
 
 			return m, nil
 
@@ -701,6 +716,16 @@ func (m *Model) renderPanels(width, height int) string {
 		return "No panels configured"
 	}
 
+	// Zoomed: active panel takes the full screen width
+	if m.zoomed {
+		panelHeight := max(height-borderLines, 1)
+		activePanel := m.panels[m.activePanelIdx]
+		activePanel.SetSize(width, panelHeight)
+		activePanel.SetFocused(true)
+
+		return activePanel.View()
+	}
+
 	leftPanelWidth := width / 4
 	rightPanelWidth := width - leftPanelWidth - 1
 
@@ -861,6 +886,17 @@ func (m *Model) overlayView(_, overlay string) string {
 }
 
 func (m *Model) updatePanelSizes() {
+	if len(m.panels) == 0 {
+		return
+	}
+
+	if m.zoomed {
+		panelHeight := max(m.height-borderLines-2, 1)
+		m.panels[m.activePanelIdx].SetSize(m.width, panelHeight)
+
+		return
+	}
+
 	leftPanelWidth := m.width / 4
 	panelHeight := (m.height - 4) / len(m.panels)
 
@@ -877,6 +913,7 @@ func (m *Model) nextPanel() {
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = (m.activePanelIdx + 1) % len(m.panels)
 	m.panels[m.activePanelIdx].SetFocused(true)
+	m.exitZoom()
 }
 
 func (m *Model) prevPanel() {
@@ -887,6 +924,7 @@ func (m *Model) prevPanel() {
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = (m.activePanelIdx - 1 + len(m.panels)) % len(m.panels)
 	m.panels[m.activePanelIdx].SetFocused(true)
+	m.exitZoom()
 }
 
 func (m *Model) selectPanel(idx int) {
@@ -897,6 +935,14 @@ func (m *Model) selectPanel(idx int) {
 	m.panels[m.activePanelIdx].SetFocused(false)
 	m.activePanelIdx = idx
 	m.panels[m.activePanelIdx].SetFocused(true)
+	m.exitZoom()
+}
+
+func (m *Model) exitZoom() {
+	if m.zoomed {
+		m.zoomed = false
+		m.updatePanelSizes()
+	}
 }
 
 func (m *Model) startContextSwitch() (*Model, tea.Cmd) {

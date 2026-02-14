@@ -111,18 +111,46 @@ func (p *IngressPanel) View() string {
 }
 
 func (p *IngressPanel) renderIngressLine(ing networkingv1.Ingress, selected bool) string {
-	name := utils.Truncate(ing.Name, p.width-15)
 	hosts := p.getIngressHosts(&ing)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-15)
-	line += " " + utils.Truncate(hosts, 12)
+	if p.width > 80 {
+		reserved := 50
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(ing.Name, nameW), nameW,
+		)
+		line += " " + utils.PadRight(utils.Truncate(hosts, 25), 25)
+
+		address := p.getIngressAddress(&ing)
+		line += " " + utils.PadRight(utils.Truncate(address, 15), 15)
+
+		age := utils.FormatAgeFromMeta(ing.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(ing.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(ing.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-15)
+		line += " " + utils.Truncate(hosts, 12)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

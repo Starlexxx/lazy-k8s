@@ -113,18 +113,45 @@ func (p *NetworkPoliciesPanel) renderNetworkPolicyLine(
 	np networkingv1.NetworkPolicy,
 	selected bool,
 ) string {
-	name := utils.Truncate(np.Name, p.width-15)
 	rules := k8s.GetNetworkPolicyRuleSummary(&np)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-20)
-	line += " " + p.styles.StatusRunning.Render(rules)
+	if p.width > 80 {
+		reserved := 35
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(np.Name, nameW), nameW,
+		)
+		line += " " + p.styles.StatusRunning.Render(
+			utils.PadRight(rules, 18),
+		)
+
+		age := utils.FormatAgeFromMeta(np.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(np.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(np.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-20)
+		line += " " + p.styles.StatusRunning.Render(rules)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)
