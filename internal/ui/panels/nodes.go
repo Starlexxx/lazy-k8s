@@ -180,7 +180,6 @@ func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 		line = "  "
 	}
 
-	// Wide mode: extra columns (roles, version, age)
 	if p.width > 80 {
 		nameW := p.nodeNameWidth(hasMetrics)
 		line += utils.PadRight(utils.Truncate(node.Name, nameW), nameW)
@@ -211,7 +210,6 @@ func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 		return p.styles.ListItem.Render(line)
 	}
 
-	// Narrow mode: name + optional metrics + status
 	nameWidth := p.width - 12
 
 	if hasMetrics {

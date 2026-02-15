@@ -159,7 +159,6 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 	}
 
 	if p.width > 80 {
-		// Wide: name + ready + age + images + optional namespace
 		reserved := 28
 		if p.width > 120 && p.allNs {
 			reserved += 16

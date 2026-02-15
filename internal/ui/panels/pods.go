@@ -131,7 +131,6 @@ func (p *PodsPanel) View() string {
 		visibleHeight = 1
 	}
 
-	// Table header when wide enough for extra columns
 	if p.width > 80 {
 		b.WriteString(p.renderPodHeader())
 		b.WriteString("\n")
@@ -229,14 +228,12 @@ func (p *PodsPanel) renderPodLine(pod corev1.Pod, selected bool) string {
 		line = "  "
 	}
 
-	// Wide mode: show extra columns (ready, restarts, age, namespace)
 	if p.width > 80 {
 		return p.renderPodLineWide(
 			pod, selected, hasMetrics, cpuStr, memStr, status,
 		)
 	}
 
-	// Narrow mode: name + optional metrics + status
 	nameWidth := p.width - 15
 
 	if hasMetrics {

@@ -137,3 +137,12 @@ func (c *Client) SwitchContext(contextName string) error {
 func (c *Client) Context() context.Context {
 	return context.Background()
 }
+
+// NewTestClient creates a Client with a fake clientset for use in tests
+// outside the k8s package where unexported fields are inaccessible.
+func NewTestClient(clientset kubernetes.Interface) *Client {
+	return &Client{
+		clientset: clientset,
+		namespace: "default",
+	}
+}

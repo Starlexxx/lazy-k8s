@@ -120,7 +120,6 @@ func (p *ServicesPanel) renderServiceLine(svc corev1.Service, selected bool) str
 	}
 
 	if p.width > 80 {
-		// Wide: name + type + cluster IP + ports + optional external IP
 		reserved := 50
 		if p.width > 120 {
 			reserved += 18

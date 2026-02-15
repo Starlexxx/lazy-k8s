@@ -287,7 +287,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fall through to normal key handling below
 		}
 
-		// Esc exits zoom when not in search mode
 		if m.zoomed && !m.searchActive && key.Matches(msg, m.keys.Back) {
 			m.zoomed = false
 			m.updatePanelSizes()
@@ -716,7 +715,6 @@ func (m *Model) renderPanels(width, height int) string {
 		return "No panels configured"
 	}
 
-	// Zoomed: active panel takes the full screen width
 	if m.zoomed {
 		panelHeight := max(height-borderLines, 1)
 		activePanel := m.panels[m.activePanelIdx]

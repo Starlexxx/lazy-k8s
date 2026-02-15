@@ -141,7 +141,6 @@ func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string 
 	}
 
 	if p.width > 80 {
-		// Wide layout: reason + type + object + age + namespace
 		reserved := 50
 		if p.width > 120 && p.allNs {
 			reserved += 16
