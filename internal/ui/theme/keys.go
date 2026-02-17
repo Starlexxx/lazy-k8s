@@ -16,6 +16,7 @@ type KeyMap struct {
 	PrevPanel key.Binding
 	Enter     key.Binding
 	Back      key.Binding
+	Zoom      key.Binding
 
 	// Panels (number keys)
 	Panel1 key.Binding
@@ -93,6 +94,10 @@ func NewKeyMap() *KeyMap {
 		Back: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "back/cancel"),
+		),
+		Zoom: key.NewBinding(
+			key.WithKeys("z"),
+			key.WithHelp("z", "zoom panel"),
 		),
 
 		Panel1: key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "panel 1")),
@@ -200,7 +205,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.NextPanel, k.PrevPanel, k.Top, k.Bottom},
-		{k.Enter, k.Back, k.Search, k.Refresh},
+		{k.Enter, k.Back, k.Zoom, k.Search, k.Refresh},
 		{k.Describe, k.Yaml, k.Logs, k.Exec},
 		{k.Delete, k.Scale, k.Restart, k.PortForward},
 		{k.Context, k.Namespace, k.CopyName, k.Copy},

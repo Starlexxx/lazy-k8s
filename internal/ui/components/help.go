@@ -40,6 +40,7 @@ func (h *Help) View(width, height int) string {
 				{"Tab", "Next panel"},
 				{"Shift+Tab", "Previous panel"},
 				{"1-9", "Jump to panel"},
+				{"z", "Zoom/fullscreen panel"},
 				{"Enter", "Select/expand"},
 				{"Esc", "Back/cancel"},
 			},

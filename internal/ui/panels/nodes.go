@@ -91,6 +91,13 @@ func (p *NodesPanel) View() string {
 		visibleHeight = 1
 	}
 
+	if p.width > 80 {
+		b.WriteString(p.renderNodeHeader())
+		b.WriteString("\n")
+
+		visibleHeight--
+	}
+
 	startIdx := 0
 	if p.cursor >= visibleHeight {
 		startIdx = p.cursor - visibleHeight + 1
@@ -116,6 +123,43 @@ func (p *NodesPanel) View() string {
 	return style.Width(p.width).Height(p.height).Render(b.String())
 }
 
+func (p *NodesPanel) renderNodeHeader() string {
+	hasMetrics := len(p.metrics) > 0
+
+	nameW := p.nodeNameWidth(hasMetrics)
+	header := "  " + utils.PadRight("NAME", nameW)
+
+	if hasMetrics {
+		header += " " + utils.PadLeft("CPU", 5)
+		header += " " + utils.PadLeft("MEM", 6)
+	}
+
+	header += " " + utils.PadRight("STATUS", 8)
+	header += " " + utils.PadRight("ROLES", 15)
+	header += " " + utils.PadRight("VERSION", 12)
+	header += " " + utils.PadRight("AGE", 8)
+
+	return p.styles.TableHeader.Render(
+		utils.Truncate(header, p.width-2),
+	)
+}
+
+func (p *NodesPanel) nodeNameWidth(hasMetrics bool) int {
+	// Reserve space for: status(8) + roles(15) + version(12) + age(8) + padding
+	reserved := 50
+
+	if hasMetrics {
+		reserved += 13
+	}
+
+	nameW := p.width - reserved
+	if nameW < 10 {
+		nameW = 10
+	}
+
+	return nameW
+}
+
 func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 	status := k8s.GetNodeStatus(&node)
 
@@ -136,7 +180,36 @@ func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 		line = "  "
 	}
 
-	// Calculate available space for name based on what we need to show
+	if p.width > 80 {
+		nameW := p.nodeNameWidth(hasMetrics)
+		line += utils.PadRight(utils.Truncate(node.Name, nameW), nameW)
+
+		if hasMetrics {
+			line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))
+			line += " " + p.styles.Muted.Render(utils.PadLeft(memStr, 6))
+		}
+
+		statusStyle := p.styles.GetStatusStyle(status)
+		line += " " + statusStyle.Render(utils.PadRight(status, 8))
+
+		roles := k8s.GetNodeRoles(&node)
+		line += " " + utils.PadRight(utils.Truncate(roles, 15), 15)
+
+		version := node.Status.NodeInfo.KubeletVersion
+		line += " " + utils.PadRight(utils.Truncate(version, 12), 12)
+
+		age := utils.FormatAgeFromMeta(node.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		if selected && p.focused {
+			return p.styles.ListItemFocused.Render(line)
+		} else if selected {
+			return p.styles.ListItemSelected.Render(line)
+		}
+
+		return p.styles.ListItem.Render(line)
+	}
+
 	nameWidth := p.width - 12
 
 	if hasMetrics {
@@ -149,7 +222,6 @@ func (p *NodesPanel) renderNodeLine(node corev1.Node, selected bool) string {
 
 	line += utils.Truncate(node.Name, nameWidth)
 
-	// Pad based on whether we show metrics
 	if hasMetrics {
 		line = utils.PadRight(line, p.width-25)
 		line += " " + p.styles.Muted.Render(utils.PadLeft(cpuStr, 5))

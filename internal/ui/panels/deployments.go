@@ -144,24 +144,54 @@ func (p *DeploymentsPanel) View() string {
 }
 
 func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, selected bool) string {
-	name := utils.Truncate(deploy.Name, p.width-15)
 	ready := k8s.GetDeploymentReadyCount(&deploy)
-
-	var line string
-	if selected {
-		line = "> " + name
-	} else {
-		line = "  " + name
-	}
-
-	line = utils.PadRight(line, p.width-10)
 
 	readyStyle := p.styles.StatusRunning
 	if deploy.Status.ReadyReplicas < *deploy.Spec.Replicas {
 		readyStyle = p.styles.StatusPending
 	}
 
-	line += " " + readyStyle.Render(ready)
+	var line string
+	if selected {
+		line = "> "
+	} else {
+		line = "  "
+	}
+
+	if p.width > 80 {
+		reserved := 28
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(deploy.Name, nameW), nameW,
+		)
+		line += " " + readyStyle.Render(utils.PadRight(ready, 7))
+
+		age := utils.FormatAgeFromMeta(deploy.CreationTimestamp)
+		line += " " + utils.PadRight(age, 8)
+
+		images := k8s.GetDeploymentImages(&deploy)
+		if len(images) > 0 {
+			imgStr := utils.Truncate(images[0], 30)
+			line += " " + p.styles.Muted.Render(imgStr)
+		}
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(deploy.Namespace, 15)
+		}
+	} else {
+		name := utils.Truncate(deploy.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-10)
+		line += " " + readyStyle.Render(ready)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

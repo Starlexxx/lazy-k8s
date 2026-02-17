@@ -126,24 +126,62 @@ func (p *EventsPanel) View() string {
 }
 
 func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string {
-	reason := utils.Truncate(event.Reason, p.width-15)
 	eventType := event.Type
-
-	var line string
-	if selected {
-		line = "> " + reason
-	} else {
-		line = "  " + reason
-	}
-
-	line = utils.PadRight(line, p.width-10)
 
 	typeStyle := p.styles.StatusRunning
 	if eventType == "Warning" {
 		typeStyle = p.styles.StatusWarning
 	}
 
-	line += " " + typeStyle.Render(utils.Truncate(eventType, 8))
+	var line string
+	if selected {
+		line = "> "
+	} else {
+		line = "  "
+	}
+
+	if p.width > 80 {
+		reserved := 50
+		if p.width > 120 && p.allNs {
+			reserved += 16
+		}
+
+		reasonW := p.width - reserved
+		if reasonW < 10 {
+			reasonW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(event.Reason, reasonW), reasonW,
+		)
+		line += " " + typeStyle.Render(
+			utils.PadRight(utils.Truncate(eventType, 8), 8),
+		)
+
+		object := fmt.Sprintf(
+			"%s/%s",
+			event.InvolvedObject.Kind,
+			event.InvolvedObject.Name,
+		)
+		line += " " + utils.PadRight(utils.Truncate(object, 25), 25)
+
+		lastSeen := event.LastTimestamp.Time
+		if lastSeen.IsZero() {
+			lastSeen = event.EventTime.Time
+		}
+
+		age := utils.FormatAge(lastSeen)
+		line += " " + utils.PadRight(age, 8)
+
+		if p.width > 120 && p.allNs {
+			line += " " + utils.Truncate(event.Namespace, 15)
+		}
+	} else {
+		reason := utils.Truncate(event.Reason, p.width-15)
+		line += reason
+		line = utils.PadRight(line, p.width-10)
+		line += " " + typeStyle.Render(utils.Truncate(eventType, 8))
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)

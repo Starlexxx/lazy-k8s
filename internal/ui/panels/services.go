@@ -110,18 +110,47 @@ func (p *ServicesPanel) View() string {
 }
 
 func (p *ServicesPanel) renderServiceLine(svc corev1.Service, selected bool) string {
-	name := utils.Truncate(svc.Name, p.width-15)
 	svcType := string(svc.Spec.Type)
 
 	var line string
 	if selected {
-		line = "> " + name
+		line = "> "
 	} else {
-		line = "  " + name
+		line = "  "
 	}
 
-	line = utils.PadRight(line, p.width-12)
-	line += " " + utils.Truncate(svcType, 10)
+	if p.width > 80 {
+		reserved := 50
+		if p.width > 120 {
+			reserved += 18
+		}
+
+		nameW := p.width - reserved
+		if nameW < 10 {
+			nameW = 10
+		}
+
+		line += utils.PadRight(
+			utils.Truncate(svc.Name, nameW), nameW,
+		)
+		line += " " + utils.PadRight(utils.Truncate(svcType, 12), 12)
+		line += " " + utils.PadRight(
+			utils.Truncate(svc.Spec.ClusterIP, 15), 15,
+		)
+
+		ports := k8s.GetServicePorts(&svc)
+		line += " " + utils.Truncate(ports, 20)
+
+		if p.width > 120 {
+			extIP := k8s.GetServiceExternalIP(&svc)
+			line += " " + utils.Truncate(extIP, 18)
+		}
+	} else {
+		name := utils.Truncate(svc.Name, p.width-15)
+		line += name
+		line = utils.PadRight(line, p.width-12)
+		line += " " + utils.Truncate(svcType, 10)
+	}
 
 	if selected && p.focused {
 		return p.styles.ListItemFocused.Render(line)
