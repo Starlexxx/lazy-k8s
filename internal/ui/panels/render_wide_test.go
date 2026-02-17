@@ -11,8 +11,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 )
 
-// --- Deployments ---
-
 func TestDeploymentsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -59,8 +57,6 @@ func TestDeploymentsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain container image")
 	}
 }
-
-// --- Services ---
 
 func TestServicesPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -109,8 +105,6 @@ func TestServicesPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- Events ---
-
 func TestEventsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -153,8 +147,6 @@ func TestEventsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain involved object kind")
 	}
 }
-
-// --- PVC ---
 
 func TestPVCPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -203,8 +195,6 @@ func TestPVCPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- CronJobs ---
-
 func TestCronJobsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -252,8 +242,6 @@ func TestCronJobsPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- Jobs ---
-
 func TestJobsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -295,8 +283,6 @@ func TestJobsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain job name")
 	}
 }
-
-// --- HPA ---
 
 func TestHPAPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -345,8 +331,6 @@ func TestHPAPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- StatefulSets ---
-
 func TestStatefulSetsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -393,8 +377,6 @@ func TestStatefulSetsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain ready count")
 	}
 }
-
-// --- DaemonSets ---
 
 func TestDaemonSetsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -443,8 +425,6 @@ func TestDaemonSetsPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- ConfigMaps ---
-
 func TestConfigMapsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -486,8 +466,6 @@ func TestConfigMapsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain configmap name")
 	}
 }
-
-// --- Secrets ---
 
 func TestSecretsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -536,8 +514,6 @@ func TestSecretsPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- Ingress ---
-
 func TestIngressPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -584,8 +560,6 @@ func TestIngressPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain ingress host")
 	}
 }
-
-// --- PV ---
 
 func TestPVPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
@@ -634,8 +608,6 @@ func TestPVPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- NetworkPolicies ---
-
 func TestNetworkPoliciesPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -678,8 +650,6 @@ func TestNetworkPoliciesPanel_ViewWide(t *testing.T) {
 	}
 }
 
-// --- ServiceAccounts ---
-
 func TestServiceAccountsPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()
 	styles := createTestStyles()
@@ -721,8 +691,6 @@ func TestServiceAccountsPanel_ViewWide(t *testing.T) {
 		t.Error("wide view should contain service account name")
 	}
 }
-
-// --- Namespaces ---
 
 func TestNamespacesPanel_ViewNarrow(t *testing.T) {
 	client := createTestK8sClient()

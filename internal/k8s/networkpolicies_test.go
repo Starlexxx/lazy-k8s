@@ -35,7 +35,6 @@ func TestListNetworkPolicies(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing network policies in default namespace
 	netpols, err := client.ListNetworkPolicies(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListNetworkPolicies returned unexpected error: %v", err)
@@ -45,7 +44,6 @@ func TestListNetworkPolicies(t *testing.T) {
 		t.Errorf("ListNetworkPolicies returned %d network policies, want 2", len(netpols))
 	}
 
-	// Test listing network policies in other namespace
 	netpols, err = client.ListNetworkPolicies(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListNetworkPolicies returned unexpected error: %v", err)
@@ -55,7 +53,6 @@ func TestListNetworkPolicies(t *testing.T) {
 		t.Errorf("ListNetworkPolicies returned %d network policies, want 1", len(netpols))
 	}
 
-	// Test listing network policies with empty namespace
 	netpols, err = client.ListNetworkPolicies(ctx, "")
 	if err != nil {
 		t.Fatalf("ListNetworkPolicies returned unexpected error: %v", err)
@@ -125,7 +122,6 @@ func TestGetNetworkPolicy(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing network policy
 	np, err := client.GetNetworkPolicy(ctx, "default", "test-netpol")
 	if err != nil {
 		t.Fatalf("GetNetworkPolicy returned unexpected error: %v", err)
@@ -139,7 +135,6 @@ func TestGetNetworkPolicy(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent network policy
 	_, err = client.GetNetworkPolicy(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetNetworkPolicy should have returned an error for non-existent network policy")
@@ -159,13 +154,11 @@ func TestDeleteNetworkPolicy(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the network policy
 	err := client.DeleteNetworkPolicy(ctx, "default", "test-netpol")
 	if err != nil {
 		t.Fatalf("DeleteNetworkPolicy returned unexpected error: %v", err)
 	}
 
-	// Verify network policy is deleted
 	_, err = client.GetNetworkPolicy(ctx, "default", "test-netpol")
 	if err == nil {
 		t.Error("NetworkPolicy should have been deleted")
@@ -185,14 +178,12 @@ func TestWatchNetworkPolicies(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchNetworkPolicies(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchNetworkPolicies returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchNetworkPolicies returned watcher with nil ResultChan")
 	}

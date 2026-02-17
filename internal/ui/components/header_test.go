@@ -68,22 +68,18 @@ func TestHeaderView(t *testing.T) {
 
 	view := header.View(100)
 
-	// Should contain the app title
 	if !strings.Contains(view, "lazy-k8s") {
 		t.Error("Header view should contain 'lazy-k8s' title")
 	}
 
-	// Should contain context info
 	if !strings.Contains(view, "Context:") || !strings.Contains(view, "prod-cluster") {
 		t.Error("Header view should contain context information")
 	}
 
-	// Should contain namespace info
 	if !strings.Contains(view, "Namespace:") || !strings.Contains(view, "kube-system") {
 		t.Error("Header view should contain namespace information")
 	}
 
-	// Should contain help hint
 	if !strings.Contains(view, "? for help") {
 		t.Error("Header view should contain help hint")
 	}
@@ -108,7 +104,6 @@ func TestHeaderViewZeroWidth(t *testing.T) {
 	// Test with zero width (should not panic)
 	view := header.View(0)
 
-	// Should still render something
 	if view == "" {
 		t.Error("Header view should not be empty even with zero width")
 	}

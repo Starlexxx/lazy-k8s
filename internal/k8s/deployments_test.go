@@ -41,7 +41,6 @@ func TestListDeployments(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing deployments in default namespace
 	deployments, err := client.ListDeployments(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
@@ -51,7 +50,6 @@ func TestListDeployments(t *testing.T) {
 		t.Errorf("ListDeployments returned %d deployments, want 2", len(deployments))
 	}
 
-	// Test listing deployments in other namespace
 	deployments, err = client.ListDeployments(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
@@ -61,7 +59,6 @@ func TestListDeployments(t *testing.T) {
 		t.Errorf("ListDeployments returned %d deployments, want 1", len(deployments))
 	}
 
-	// Test listing deployments with empty namespace (should use client's default)
 	deployments, err = client.ListDeployments(ctx, "")
 	if err != nil {
 		t.Fatalf("ListDeployments returned unexpected error: %v", err)
@@ -126,7 +123,6 @@ func TestGetDeployment(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing deployment
 	deployment, err := client.GetDeployment(ctx, "default", "test-deployment")
 	if err != nil {
 		t.Fatalf("GetDeployment returned unexpected error: %v", err)
@@ -147,7 +143,6 @@ func TestGetDeployment(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent deployment
 	_, err = client.GetDeployment(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetDeployment should have returned an error for non-existent deployment")
@@ -167,13 +162,11 @@ func TestDeleteDeployment(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the deployment
 	err := client.DeleteDeployment(ctx, "default", "test-deployment")
 	if err != nil {
 		t.Fatalf("DeleteDeployment returned unexpected error: %v", err)
 	}
 
-	// Verify deployment is deleted
 	_, err = client.GetDeployment(ctx, "default", "test-deployment")
 	if err == nil {
 		t.Error("Deployment should have been deleted")
@@ -200,13 +193,11 @@ func TestUpdateDeployment(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Get the deployment
 	deployment, err := client.GetDeployment(ctx, "default", "test-deployment")
 	if err != nil {
 		t.Fatalf("GetDeployment returned unexpected error: %v", err)
 	}
 
-	// Update the deployment
 	deployment.Spec.Replicas = int32Ptr(10)
 	deployment.Labels = map[string]string{"updated": "true"}
 
@@ -237,14 +228,12 @@ func TestWatchDeployments(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchDeployments(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchDeployments returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchDeployments returned watcher with nil ResultChan")
 	}
@@ -387,7 +376,6 @@ func TestRollbackDeployment(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Execute rollback
 	err := client.RollbackDeployment(ctx, "default", "test-deployment")
 	if err != nil {
 		t.Fatalf("RollbackDeployment returned unexpected error: %v", err)

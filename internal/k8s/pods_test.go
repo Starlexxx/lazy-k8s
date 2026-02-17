@@ -16,8 +16,6 @@ func createTestClient(clientset *fake.Clientset) *Client {
 	}
 }
 
-// Note: The Client struct uses kubernetes.Interface which allows using fake.Clientset for testing
-
 func TestListPods(t *testing.T) {
 	clientset := fake.NewSimpleClientset(
 		&corev1.Pod{
@@ -49,7 +47,6 @@ func TestListPods(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing pods in default namespace
 	pods, err := client.ListPods(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
@@ -59,7 +56,6 @@ func TestListPods(t *testing.T) {
 		t.Errorf("ListPods returned %d pods, want 2", len(pods))
 	}
 
-	// Test listing pods in other namespace
 	pods, err = client.ListPods(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
@@ -69,7 +65,6 @@ func TestListPods(t *testing.T) {
 		t.Errorf("ListPods returned %d pods, want 1", len(pods))
 	}
 
-	// Test listing pods with empty namespace (should use client's default)
 	pods, err = client.ListPods(ctx, "")
 	if err != nil {
 		t.Fatalf("ListPods returned unexpected error: %v", err)
@@ -133,7 +128,6 @@ func TestGetPod(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing pod
 	pod, err := client.GetPod(ctx, "default", "test-pod")
 	if err != nil {
 		t.Fatalf("GetPod returned unexpected error: %v", err)
@@ -147,13 +141,11 @@ func TestGetPod(t *testing.T) {
 		t.Errorf("GetPod returned pod with %d containers, want 1", len(pod.Spec.Containers))
 	}
 
-	// Test getting non-existent pod
 	_, err = client.GetPod(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetPod should have returned an error for non-existent pod")
 	}
 
-	// Test getting pod with empty namespace (should use client's default)
 	pod, err = client.GetPod(ctx, "", "test-pod")
 	if err != nil {
 		t.Fatalf("GetPod with empty namespace returned unexpected error: %v", err)
@@ -177,13 +169,11 @@ func TestDeletePod(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the pod
 	err := client.DeletePod(ctx, "default", "test-pod")
 	if err != nil {
 		t.Fatalf("DeletePod returned unexpected error: %v", err)
 	}
 
-	// Verify pod is deleted
 	_, err = client.GetPod(ctx, "default", "test-pod")
 	if err == nil {
 		t.Error("Pod should have been deleted")
@@ -468,14 +458,12 @@ func TestWatchPods(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchPods(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchPods returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchPods returned watcher with nil ResultChan")
 	}

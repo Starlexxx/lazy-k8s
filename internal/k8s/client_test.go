@@ -12,14 +12,12 @@ func TestClientSetNamespace(t *testing.T) {
 		namespace: "default",
 	}
 
-	// Test setting namespace
 	client.SetNamespace("my-namespace")
 
 	if client.namespace != "my-namespace" {
 		t.Errorf("SetNamespace() namespace = %q, want %q", client.namespace, "my-namespace")
 	}
 
-	// Test setting to empty string
 	client.SetNamespace("")
 
 	if client.namespace != "" {

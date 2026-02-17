@@ -6,12 +6,17 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/Starlexxx/lazy-k8s/internal/config"
+	"github.com/Starlexxx/lazy-k8s/internal/k8s"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/components"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/panels"
+	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
 )
 
 // TestViewMode tests view mode constants.
@@ -29,6 +34,7 @@ func TestViewMode(t *testing.T) {
 		{ViewContextSwitch, 6},
 		{ViewNamespaceSwitch, 7},
 		{ViewContainerSelect, 8},
+		{ViewDiff, 9},
 	}
 
 	for _, tt := range tests {
@@ -59,7 +65,6 @@ func TestK8sClientWithFake(t *testing.T) {
 		},
 	)
 
-	// Test listing namespaces
 	namespaces, err := fakeClientset.CoreV1().
 		Namespaces().
 		List(context.Background(), metav1.ListOptions{})
@@ -71,7 +76,6 @@ func TestK8sClientWithFake(t *testing.T) {
 		t.Errorf("Expected 1 namespace, got %d", len(namespaces.Items))
 	}
 
-	// Test listing pods
 	pods, err := fakeClientset.CoreV1().
 		Pods("default").
 		List(context.Background(), metav1.ListOptions{})
@@ -162,22 +166,18 @@ func TestConfigStructs(t *testing.T) {
 		},
 	}
 
-	// Test namespace
 	if cfg.Namespace != "default" {
 		t.Errorf("Namespace = %q, want %q", cfg.Namespace, "default")
 	}
 
-	// Test theme
 	if cfg.Theme.PrimaryColor != "#7aa2f7" {
 		t.Errorf("PrimaryColor = %q, want %q", cfg.Theme.PrimaryColor, "#7aa2f7")
 	}
 
-	// Test keybindings
 	if len(cfg.Keybindings.Quit) != 2 {
 		t.Errorf("Quit keybindings = %d, want 2", len(cfg.Keybindings.Quit))
 	}
 
-	// Test panels
 	if len(cfg.Panels.Visible) != 3 {
 		t.Errorf("Visible panels = %d, want 3", len(cfg.Panels.Visible))
 	}
@@ -189,7 +189,6 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 	contextList := []string{"dev", "staging", "prod"}
 	selectIdx := 0
 
-	// Test moving down
 	if selectIdx < len(contextList)-1 {
 		selectIdx++
 	}
@@ -198,7 +197,6 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 		t.Errorf("After moving down, selectIdx = %d, want 1", selectIdx)
 	}
 
-	// Test moving up
 	if selectIdx > 0 {
 		selectIdx--
 	}
@@ -207,7 +205,6 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 		t.Errorf("After moving up, selectIdx = %d, want 0", selectIdx)
 	}
 
-	// Test boundary - should not go below 0
 	if selectIdx > 0 {
 		selectIdx--
 	}
@@ -216,7 +213,6 @@ func TestRenderSwitchViewLogic(t *testing.T) {
 		t.Errorf("At boundary, selectIdx = %d, want 0", selectIdx)
 	}
 
-	// Test boundary - should not go above max
 	selectIdx = len(contextList) - 1
 	if selectIdx < len(contextList)-1 {
 		selectIdx++
@@ -399,13 +395,11 @@ func TestPanelNavigationLogic(t *testing.T) {
 	numPanels := 4
 	activePanelIdx := 0
 
-	// Test next panel
 	activePanelIdx = (activePanelIdx + 1) % numPanels
 	if activePanelIdx != 1 {
 		t.Errorf("After next panel, idx = %d, want 1", activePanelIdx)
 	}
 
-	// Test wrap around
 	activePanelIdx = 3
 
 	activePanelIdx = (activePanelIdx + 1) % numPanels
@@ -413,7 +407,6 @@ func TestPanelNavigationLogic(t *testing.T) {
 		t.Errorf("After wrap around, idx = %d, want 0", activePanelIdx)
 	}
 
-	// Test previous panel
 	activePanelIdx = 1
 
 	activePanelIdx = (activePanelIdx - 1 + numPanels) % numPanels
@@ -421,7 +414,6 @@ func TestPanelNavigationLogic(t *testing.T) {
 		t.Errorf("After prev panel, idx = %d, want 0", activePanelIdx)
 	}
 
-	// Test previous panel wrap around
 	activePanelIdx = 0
 
 	activePanelIdx = (activePanelIdx - 1 + numPanels) % numPanels
@@ -474,6 +466,7 @@ func TestViewModeTransitions(t *testing.T) {
 		{"yaml to normal", ViewYaml, "esc", ViewNormal},
 		{"normal to context switch", ViewNormal, "K", ViewContextSwitch},
 		{"context switch to normal", ViewContextSwitch, "esc", ViewNormal},
+		{"diff to normal", ViewDiff, "esc", ViewNormal},
 	}
 
 	for _, tt := range tests {
@@ -490,13 +483,11 @@ func TestViewModeTransitions(t *testing.T) {
 func TestShowAllNamespaceFlag(t *testing.T) {
 	showAllNs := false
 
-	// Toggle on
 	showAllNs = !showAllNs
 	if !showAllNs {
 		t.Error("showAllNs should be true after toggle")
 	}
 
-	// Toggle off
 	showAllNs = !showAllNs
 	if showAllNs {
 		t.Error("showAllNs should be false after second toggle")
@@ -508,19 +499,16 @@ func TestSearchState(t *testing.T) {
 	searchActive := false
 	searchQuery := ""
 
-	// Activate search
 	searchActive = true
 	if !searchActive {
 		t.Error("searchActive should be true")
 	}
 
-	// Set query
 	searchQuery = "test-pod"
 	if searchQuery != "test-pod" {
 		t.Errorf("searchQuery = %q, want %q", searchQuery, "test-pod")
 	}
 
-	// Clear search
 	searchActive = false
 	searchQuery = ""
 
@@ -751,27 +739,378 @@ func TestMockK8sClientMethods(t *testing.T) {
 		},
 	}
 
-	// Test CurrentNamespace
 	if mock.CurrentNamespace() != "default" {
 		t.Errorf("CurrentNamespace() = %q, want %q", mock.CurrentNamespace(), "default")
 	}
 
-	// Test CurrentContext
 	if mock.CurrentContext() != "dev" {
 		t.Errorf("CurrentContext() = %q, want %q", mock.CurrentContext(), "dev")
 	}
 
-	// Test GetContexts
 	contexts := mock.GetContexts()
 	if len(contexts) != 3 {
 		t.Errorf("GetContexts() returned %d contexts, want 3", len(contexts))
 	}
 
-	// Test SetNamespace
 	mock.SetNamespace("kube-system")
 
 	if mock.CurrentNamespace() != "kube-system" {
 		t.Errorf("After SetNamespace, CurrentNamespace() = %q, want %q",
 			mock.CurrentNamespace(), "kube-system")
+	}
+}
+
+// TestDiffLoadedMsg tests that diffLoadedMsg sets ViewDiff mode.
+func TestDiffLoadedMsg(t *testing.T) {
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+
+	m := &Model{
+		styles:   styles,
+		keys:     keys,
+		viewMode: ViewNormal,
+		diffView: components.NewDiffViewer(styles),
+		width:    80,
+		height:   24,
+	}
+
+	msg := diffLoadedMsg{
+		title:   "Diff: nginx (rev 1 → 2)",
+		oldYAML: "image: nginx:1.19\n",
+		newYAML: "image: nginx:1.20\n",
+	}
+
+	result, _ := m.Update(msg)
+
+	updatedModel, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updatedModel.viewMode != ViewDiff {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewDiff)",
+			updatedModel.viewMode, ViewDiff,
+		)
+	}
+}
+
+// TestViewDiffEscReturnsToNormal tests Esc in ViewDiff returns to Normal.
+func TestViewDiffEscReturnsToNormal(t *testing.T) {
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+
+	m := &Model{
+		styles:   styles,
+		keys:     keys,
+		viewMode: ViewDiff,
+		diffView: components.NewDiffViewer(styles),
+		width:    80,
+		height:   24,
+	}
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.Update(msg)
+
+	updatedModel, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updatedModel.viewMode != ViewNormal {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewNormal)",
+			updatedModel.viewMode, ViewNormal,
+		)
+	}
+}
+
+// TestViewDiffScrollDelegation tests that key input in ViewDiff
+// is forwarded to the DiffViewer component.
+func TestViewDiffScrollDelegation(t *testing.T) {
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+
+	diffView := components.NewDiffViewer(styles)
+	diffView.SetContent("Test", "a\nb\nc\n", "a\nb\nc\n")
+
+	m := &Model{
+		styles:   styles,
+		keys:     keys,
+		viewMode: ViewDiff,
+		diffView: diffView,
+		width:    80,
+		height:   24,
+	}
+
+	// Send a 'j' key — should be delegated to diffView
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	result, _ := m.Update(msg)
+
+	updatedModel, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	// Should still be in ViewDiff (not switched to Normal)
+	if updatedModel.viewMode != ViewDiff {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewDiff) after scroll key",
+			updatedModel.viewMode, ViewDiff,
+		)
+	}
+}
+
+// TestLoadRevisionDiffLessThanTwoRevisions tests loadRevisionDiff
+// when deployment has fewer than 2 revisions.
+func TestLoadRevisionDiffLessThanTwoRevisions(t *testing.T) {
+	fakeClientset := fake.NewSimpleClientset()
+
+	client := k8s.NewTestClient(fakeClientset)
+
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+
+	m := &Model{
+		k8sClient: client,
+		styles:    styles,
+		keys:      keys,
+		viewMode:  ViewNormal,
+		diffView:  components.NewDiffViewer(styles),
+	}
+
+	cmd := m.loadRevisionDiff("default", "nonexistent-deploy")
+	if cmd == nil {
+		t.Fatal("loadRevisionDiff should return a command")
+	}
+
+	result := cmd()
+
+	// With no ReplicaSets, should get a StatusMsg about fewer than 2 revisions
+	switch msg := result.(type) {
+	case panels.StatusMsg:
+		if !strings.Contains(msg.Message, "fewer than 2 revisions") {
+			t.Errorf(
+				"unexpected status message: %q",
+				msg.Message,
+			)
+		}
+	case panels.ErrorMsg:
+		// Also acceptable if listing fails
+	default:
+		t.Errorf("expected StatusMsg or ErrorMsg, got %T", result)
+	}
+}
+
+// TestDiffLoadedMsgStruct tests the diffLoadedMsg struct fields.
+func TestDiffLoadedMsgStruct(t *testing.T) {
+	msg := diffLoadedMsg{
+		title:   "Diff: app (rev 1 → 2)",
+		oldYAML: "old yaml",
+		newYAML: "new yaml",
+	}
+
+	if msg.title != "Diff: app (rev 1 → 2)" {
+		t.Errorf("title = %q, want %q", msg.title, "Diff: app (rev 1 → 2)")
+	}
+
+	if msg.oldYAML != "old yaml" {
+		t.Errorf("oldYAML = %q, want %q", msg.oldYAML, "old yaml")
+	}
+
+	if msg.newYAML != "new yaml" {
+		t.Errorf("newYAML = %q, want %q", msg.newYAML, "new yaml")
+	}
+}
+
+// TestLoadRevisionDiffWithRevisions tests loadRevisionDiff success path
+// with a deployment that has two ReplicaSets (revisions).
+func TestLoadRevisionDiffWithRevisions(t *testing.T) {
+	replicas := int32(1)
+	trueVal := true
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web",
+			Namespace: "default",
+			UID:       "deploy-uid-1",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "web"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "web"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "web", Image: "nginx:1.20"},
+					},
+				},
+			},
+		},
+	}
+
+	rs1 := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-rs-1",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "web"},
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "1",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Deployment",
+					Name:       "web",
+					UID:        "deploy-uid-1",
+					Controller: &trueVal,
+				},
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "web"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "web"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "web", Image: "nginx:1.19"},
+					},
+				},
+			},
+		},
+	}
+
+	rs2 := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "web-rs-2",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "web"},
+			Annotations: map[string]string{
+				"deployment.kubernetes.io/revision": "2",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:       "Deployment",
+					Name:       "web",
+					UID:        "deploy-uid-1",
+					Controller: &trueVal,
+				},
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "web"},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "web"},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "web", Image: "nginx:1.20"},
+					},
+				},
+			},
+		},
+	}
+
+	fakeClientset := fake.NewSimpleClientset(deploy, rs1, rs2)
+	client := k8s.NewTestClient(fakeClientset)
+
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+
+	m := &Model{
+		k8sClient: client,
+		styles:    styles,
+		keys:      keys,
+		viewMode:  ViewNormal,
+		diffView:  components.NewDiffViewer(styles),
+	}
+
+	cmd := m.loadRevisionDiff("default", "web")
+	if cmd == nil {
+		t.Fatal("loadRevisionDiff should return a command")
+	}
+
+	result := cmd()
+
+	msg, ok := result.(diffLoadedMsg)
+	if !ok {
+		t.Fatalf("expected diffLoadedMsg, got %T: %v", result, result)
+	}
+
+	if !strings.Contains(msg.title, "web") {
+		t.Errorf("title should contain deployment name, got %q", msg.title)
+	}
+
+	if !strings.Contains(msg.title, "rev 1") || !strings.Contains(msg.title, "2") {
+		t.Errorf("title should contain revision numbers, got %q", msg.title)
+	}
+
+	if msg.oldYAML == "" {
+		t.Error("oldYAML should not be empty")
+	}
+
+	if msg.newYAML == "" {
+		t.Error("newYAML should not be empty")
+	}
+
+	// Verify the diff YAML contains the expected image changes
+	if !strings.Contains(msg.oldYAML, "nginx:1.19") {
+		t.Errorf("oldYAML should contain nginx:1.19, got:\n%s", msg.oldYAML)
+	}
+
+	if !strings.Contains(msg.newYAML, "nginx:1.20") {
+		t.Errorf("newYAML should contain nginx:1.20, got:\n%s", msg.newYAML)
 	}
 }
