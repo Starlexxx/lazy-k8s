@@ -51,6 +51,7 @@ type KeyMap struct {
 	Namespace    key.Binding
 	AllNamespace key.Binding
 	FollowLogs   key.Binding
+	Diff         key.Binding
 }
 
 func NewKeyMap() *KeyMap {
@@ -194,6 +195,10 @@ func NewKeyMap() *KeyMap {
 			key.WithKeys("f"),
 			key.WithHelp("f", "follow logs"),
 		),
+		Diff: key.NewBinding(
+			key.WithKeys("V"),
+			key.WithHelp("V", "version diff"),
+		),
 	}
 }
 
@@ -207,7 +212,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.NextPanel, k.PrevPanel, k.Top, k.Bottom},
 		{k.Enter, k.Back, k.Zoom, k.Search, k.Refresh},
 		{k.Describe, k.Yaml, k.Logs, k.Exec},
-		{k.Delete, k.Scale, k.Restart, k.PortForward},
+		{k.Delete, k.Scale, k.Restart, k.PortForward, k.Diff},
 		{k.Context, k.Namespace, k.CopyName, k.Copy},
 		{k.Help, k.Quit},
 	}

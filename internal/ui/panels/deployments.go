@@ -84,6 +84,19 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 					Namespace:      deploy.Namespace,
 				}
 			}
+		case key.Matches(msg, key.NewBinding(key.WithKeys("V"))):
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			deploy := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return DiffRequestMsg{
+					DeploymentName: deploy.Name,
+					Namespace:      deploy.Namespace,
+				}
+			}
 		}
 
 	case deploymentsLoadedMsg:
@@ -267,7 +280,11 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [R]ollback [d]escribe [y]aml [D]elete"))
+	b.WriteString(
+		p.styles.Muted.Render(
+			"[s]cale [r]estart [R]ollback [V]ersion diff [d]escribe [y]aml [D]elete",
+		),
+	)
 
 	return b.String()
 }

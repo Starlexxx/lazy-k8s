@@ -64,6 +64,9 @@ type Styles struct {
 	StatusSucceeded   lipgloss.Style
 	StatusUnknown     lipgloss.Style
 	StatusTerminating lipgloss.Style
+
+	DiffAdded   lipgloss.Style
+	DiffRemoved lipgloss.Style
 }
 
 func NewStyles(cfg *config.ThemeConfig) *Styles {
@@ -221,6 +224,12 @@ func NewStyles(cfg *config.ThemeConfig) *Styles {
 
 	s.StatusTerminating = lipgloss.NewStyle().
 		Foreground(s.Warning)
+
+	s.DiffAdded = lipgloss.NewStyle().
+		Foreground(s.Success)
+
+	s.DiffRemoved = lipgloss.NewStyle().
+		Foreground(s.Error)
 
 	return s
 }

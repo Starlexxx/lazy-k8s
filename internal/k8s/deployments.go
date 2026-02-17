@@ -8,9 +8,11 @@ import (
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	"sigs.k8s.io/yaml"
 )
 
 type DeploymentInfo struct {
@@ -129,23 +131,36 @@ func (c *Client) UpdateDeployment(
 		Update(ctx, deployment, metav1.UpdateOptions{})
 }
 
-var ErrNoPreviousRevision = errors.New("no previous revision found for rollback")
+var (
+	ErrNoPreviousRevision = errors.New("no previous revision found for rollback")
+	ErrRevisionNotFound   = errors.New("revision not found")
+)
 
-func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+// RevisionInfo holds metadata about a single deployment revision
+// extracted from the owning ReplicaSet.
+type RevisionInfo struct {
+	Revision  int64
+	Name      string
+	CreatedAt metav1.Time
+	Template  corev1.PodTemplateSpec
+}
 
+// getOwnedReplicaSets returns all ReplicaSets owned by the named deployment,
+// sorted by revision number descending (newest first).
+func (c *Client) getOwnedReplicaSets(
+	ctx context.Context,
+	namespace, name string,
+) ([]appsv1.ReplicaSet, error) {
 	deployment, err := c.GetDeployment(ctx, namespace, name)
 	if err != nil {
-		return fmt.Errorf("failed to get deployment: %w", err)
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
 	rsList, err := c.clientset.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: metav1.FormatLabelSelector(deployment.Spec.Selector),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list replica sets: %w", err)
+		return nil, fmt.Errorf("failed to list replica sets: %w", err)
 	}
 
 	var ownedRS []appsv1.ReplicaSet
@@ -160,16 +175,31 @@ func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string)
 		}
 	}
 
+	sort.Slice(ownedRS, func(i, j int) bool {
+		return getRevision(&ownedRS[i]) > getRevision(&ownedRS[j])
+	})
+
+	return ownedRS, nil
+}
+
+func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string) error {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+
+	ownedRS, err := c.getOwnedReplicaSets(ctx, namespace, name)
+	if err != nil {
+		return err
+	}
+
 	if len(ownedRS) < 2 {
 		return ErrNoPreviousRevision
 	}
 
-	sort.Slice(ownedRS, func(i, j int) bool {
-		revI := getRevision(&ownedRS[i])
-		revJ := getRevision(&ownedRS[j])
-
-		return revI > revJ
-	})
+	deployment, err := c.GetDeployment(ctx, namespace, name)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
 
 	previousRS := ownedRS[1]
 	deployment.Spec.Template = previousRS.Spec.Template
@@ -180,6 +210,62 @@ func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string)
 	}
 
 	return nil
+}
+
+// ListDeploymentRevisions returns revision metadata for all ReplicaSets
+// owned by the deployment, sorted newest-first.
+func (c *Client) ListDeploymentRevisions(
+	ctx context.Context,
+	namespace, name string,
+) ([]RevisionInfo, error) {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+
+	ownedRS, err := c.getOwnedReplicaSets(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+
+	revisions := make([]RevisionInfo, 0, len(ownedRS))
+
+	for i := range ownedRS {
+		rs := &ownedRS[i]
+		revisions = append(revisions, RevisionInfo{
+			Revision:  getRevision(rs),
+			Name:      rs.Name,
+			CreatedAt: rs.CreationTimestamp,
+			Template:  rs.Spec.Template,
+		})
+	}
+
+	return revisions, nil
+}
+
+// GetRevisionYAML marshals the PodTemplateSpec for a specific revision to YAML.
+// Returns ErrRevisionNotFound if no matching revision exists.
+func (c *Client) GetRevisionYAML(
+	ctx context.Context,
+	namespace, name string,
+	revision int64,
+) (string, error) {
+	revisions, err := c.ListDeploymentRevisions(ctx, namespace, name)
+	if err != nil {
+		return "", err
+	}
+
+	for _, rev := range revisions {
+		if rev.Revision == revision {
+			data, marshalErr := yaml.Marshal(rev.Template)
+			if marshalErr != nil {
+				return "", fmt.Errorf("failed to marshal revision template: %w", marshalErr)
+			}
+
+			return string(data), nil
+		}
+	}
+
+	return "", ErrRevisionNotFound
 }
 
 func getRevision(rs *appsv1.ReplicaSet) int64 {
