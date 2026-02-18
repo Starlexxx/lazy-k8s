@@ -34,7 +34,6 @@ func TestListServiceAccounts(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing service accounts in default namespace
 	sas, err := client.ListServiceAccounts(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListServiceAccounts returned unexpected error: %v", err)
@@ -44,7 +43,6 @@ func TestListServiceAccounts(t *testing.T) {
 		t.Errorf("ListServiceAccounts returned %d service accounts, want 2", len(sas))
 	}
 
-	// Test listing service accounts in other namespace
 	sas, err = client.ListServiceAccounts(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListServiceAccounts returned unexpected error: %v", err)
@@ -54,7 +52,6 @@ func TestListServiceAccounts(t *testing.T) {
 		t.Errorf("ListServiceAccounts returned %d service accounts, want 1", len(sas))
 	}
 
-	// Test listing service accounts with empty namespace
 	sas, err = client.ListServiceAccounts(ctx, "")
 	if err != nil {
 		t.Fatalf("ListServiceAccounts returned unexpected error: %v", err)
@@ -119,7 +116,6 @@ func TestGetServiceAccount(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing service account
 	sa, err := client.GetServiceAccount(ctx, "default", "test-sa")
 	if err != nil {
 		t.Fatalf("GetServiceAccount returned unexpected error: %v", err)
@@ -140,7 +136,6 @@ func TestGetServiceAccount(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent service account
 	_, err = client.GetServiceAccount(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetServiceAccount should have returned an error for non-existent service account")
@@ -160,13 +155,11 @@ func TestDeleteServiceAccount(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the service account
 	err := client.DeleteServiceAccount(ctx, "default", "test-sa")
 	if err != nil {
 		t.Fatalf("DeleteServiceAccount returned unexpected error: %v", err)
 	}
 
-	// Verify service account is deleted
 	_, err = client.GetServiceAccount(ctx, "default", "test-sa")
 	if err == nil {
 		t.Error("ServiceAccount should have been deleted")
@@ -186,14 +179,12 @@ func TestWatchServiceAccounts(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchServiceAccounts(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchServiceAccounts returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchServiceAccounts returned watcher with nil ResultChan")
 	}

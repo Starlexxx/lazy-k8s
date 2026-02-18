@@ -70,13 +70,10 @@ func TestPortForwarderStop(t *testing.T) {
 		t.Fatalf("NewPortForwarder returned unexpected error: %v", err)
 	}
 
-	// Stop should close the channel
 	pf.Stop()
 
-	// Verify channel is closed
 	select {
 	case <-stopCh:
-		// Channel is closed as expected
 	default:
 		t.Error("Stop() should close the StopCh")
 	}

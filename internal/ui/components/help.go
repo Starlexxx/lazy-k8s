@@ -83,6 +83,7 @@ func (h *Help) View(width, height int) string {
 				{"s", "Scale"},
 				{"r", "Restart (rollout)"},
 				{"R", "Rollback"},
+				{"V", "Version diff"},
 			},
 		},
 	}

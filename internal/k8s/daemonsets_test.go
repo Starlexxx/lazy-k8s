@@ -35,7 +35,6 @@ func TestListDaemonSets(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing daemonsets in default namespace
 	daemonsets, err := client.ListDaemonSets(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListDaemonSets returned unexpected error: %v", err)
@@ -45,7 +44,6 @@ func TestListDaemonSets(t *testing.T) {
 		t.Errorf("ListDaemonSets returned %d daemonsets, want 2", len(daemonsets))
 	}
 
-	// Test listing daemonsets in other namespace
 	daemonsets, err = client.ListDaemonSets(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListDaemonSets returned unexpected error: %v", err)
@@ -55,7 +53,6 @@ func TestListDaemonSets(t *testing.T) {
 		t.Errorf("ListDaemonSets returned %d daemonsets, want 1", len(daemonsets))
 	}
 
-	// Test listing daemonsets with empty namespace (should use client's default)
 	daemonsets, err = client.ListDaemonSets(ctx, "")
 	if err != nil {
 		t.Fatalf("ListDaemonSets returned unexpected error: %v", err)
@@ -121,7 +118,6 @@ func TestGetDaemonSet(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing daemonset
 	ds, err := client.GetDaemonSet(ctx, "default", "test-daemonset")
 	if err != nil {
 		t.Fatalf("GetDaemonSet returned unexpected error: %v", err)
@@ -138,7 +134,6 @@ func TestGetDaemonSet(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent daemonset
 	_, err = client.GetDaemonSet(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetDaemonSet should have returned an error for non-existent daemonset")
@@ -158,13 +153,11 @@ func TestDeleteDaemonSet(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the daemonset
 	err := client.DeleteDaemonSet(ctx, "default", "test-daemonset")
 	if err != nil {
 		t.Fatalf("DeleteDaemonSet returned unexpected error: %v", err)
 	}
 
-	// Verify daemonset is deleted
 	_, err = client.GetDaemonSet(ctx, "default", "test-daemonset")
 	if err == nil {
 		t.Error("DaemonSet should have been deleted")
@@ -184,14 +177,12 @@ func TestWatchDaemonSets(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchDaemonSets(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchDaemonSets returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchDaemonSets returned watcher with nil ResultChan")
 	}

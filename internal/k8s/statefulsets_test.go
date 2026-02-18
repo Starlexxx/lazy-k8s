@@ -35,7 +35,6 @@ func TestListStatefulSets(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing statefulsets in default namespace
 	statefulsets, err := client.ListStatefulSets(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListStatefulSets returned unexpected error: %v", err)
@@ -45,7 +44,6 @@ func TestListStatefulSets(t *testing.T) {
 		t.Errorf("ListStatefulSets returned %d statefulsets, want 2", len(statefulsets))
 	}
 
-	// Test listing statefulsets in other namespace
 	statefulsets, err = client.ListStatefulSets(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListStatefulSets returned unexpected error: %v", err)
@@ -55,7 +53,6 @@ func TestListStatefulSets(t *testing.T) {
 		t.Errorf("ListStatefulSets returned %d statefulsets, want 1", len(statefulsets))
 	}
 
-	// Test listing statefulsets with empty namespace (should use client's default)
 	statefulsets, err = client.ListStatefulSets(ctx, "")
 	if err != nil {
 		t.Fatalf("ListStatefulSets returned unexpected error: %v", err)
@@ -123,7 +120,6 @@ func TestGetStatefulSet(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing statefulset
 	sts, err := client.GetStatefulSet(ctx, "default", "test-statefulset")
 	if err != nil {
 		t.Fatalf("GetStatefulSet returned unexpected error: %v", err)
@@ -144,7 +140,6 @@ func TestGetStatefulSet(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent statefulset
 	_, err = client.GetStatefulSet(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetStatefulSet should have returned an error for non-existent statefulset")
@@ -164,13 +159,11 @@ func TestDeleteStatefulSet(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the statefulset
 	err := client.DeleteStatefulSet(ctx, "default", "test-statefulset")
 	if err != nil {
 		t.Fatalf("DeleteStatefulSet returned unexpected error: %v", err)
 	}
 
-	// Verify statefulset is deleted
 	_, err = client.GetStatefulSet(ctx, "default", "test-statefulset")
 	if err == nil {
 		t.Error("StatefulSet should have been deleted")
@@ -190,14 +183,12 @@ func TestWatchStatefulSets(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchStatefulSets(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchStatefulSets returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchStatefulSets returned watcher with nil ResultChan")
 	}

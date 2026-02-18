@@ -40,7 +40,6 @@ func TestListCronJobs(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing cronjobs in default namespace
 	cronjobs, err := client.ListCronJobs(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListCronJobs returned unexpected error: %v", err)
@@ -50,7 +49,6 @@ func TestListCronJobs(t *testing.T) {
 		t.Errorf("ListCronJobs returned %d cronjobs, want 2", len(cronjobs))
 	}
 
-	// Test listing cronjobs in other namespace
 	cronjobs, err = client.ListCronJobs(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListCronJobs returned unexpected error: %v", err)
@@ -60,7 +58,6 @@ func TestListCronJobs(t *testing.T) {
 		t.Errorf("ListCronJobs returned %d cronjobs, want 1", len(cronjobs))
 	}
 
-	// Test listing cronjobs with empty namespace (should use client's default)
 	cronjobs, err = client.ListCronJobs(ctx, "")
 	if err != nil {
 		t.Fatalf("ListCronJobs returned unexpected error: %v", err)
@@ -122,7 +119,6 @@ func TestGetCronJob(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing cronjob
 	cj, err := client.GetCronJob(ctx, "default", "test-cronjob")
 	if err != nil {
 		t.Fatalf("GetCronJob returned unexpected error: %v", err)
@@ -140,7 +136,6 @@ func TestGetCronJob(t *testing.T) {
 		)
 	}
 
-	// Test getting non-existent cronjob
 	_, err = client.GetCronJob(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetCronJob should have returned an error for non-existent cronjob")
@@ -160,13 +155,11 @@ func TestDeleteCronJob(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the cronjob
 	err := client.DeleteCronJob(ctx, "default", "test-cronjob")
 	if err != nil {
 		t.Fatalf("DeleteCronJob returned unexpected error: %v", err)
 	}
 
-	// Verify cronjob is deleted
 	_, err = client.GetCronJob(ctx, "default", "test-cronjob")
 	if err == nil {
 		t.Error("CronJob should have been deleted")
@@ -186,14 +179,12 @@ func TestWatchCronJobs(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchCronJobs(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchCronJobs returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchCronJobs returned watcher with nil ResultChan")
 	}
@@ -228,18 +219,15 @@ func TestTriggerCronJob(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Trigger the cronjob
 	job, err := client.TriggerCronJob(ctx, "default", "test-cronjob")
 	if err != nil {
 		t.Fatalf("TriggerCronJob returned unexpected error: %v", err)
 	}
 
-	// Verify job was created
 	if job == nil {
 		t.Fatal("TriggerCronJob should have returned a job")
 	}
 
-	// Verify job has the manual annotation
 	if job.Annotations["cronjob.kubernetes.io/instantiate"] != "manual" {
 		t.Error("Created job should have manual instantiate annotation")
 	}

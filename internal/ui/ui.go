@@ -42,6 +42,7 @@ const (
 	ViewContextSwitch
 	ViewNamespaceSwitch
 	ViewContainerSelect
+	ViewDiff
 )
 
 // borderLines is the number of lines used by panel borders (top + bottom).
@@ -73,6 +74,7 @@ type Model struct {
 	confirm   *components.Confirm
 	yamlView  *components.YamlViewer
 	logView   *components.LogViewer
+	diffView  *components.DiffViewer
 	search    *components.Search
 	input     *components.Input
 
@@ -126,6 +128,7 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.confirm = components.NewConfirm(styles)
 	m.yamlView = components.NewYamlViewer(styles)
 	m.logView = components.NewLogViewer(styles)
+	m.diffView = components.NewDiffViewer(styles)
 	m.search = components.NewSearch(styles)
 	m.input = components.NewInput(styles)
 
@@ -251,6 +254,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 
 			m.logView, cmd = m.logView.Update(msg)
+
+			return m, cmd
+
+		case ViewDiff:
+			if key.Matches(msg, m.keys.Back) {
+				m.viewMode = ViewNormal
+
+				return m, nil
+			}
+
+			var cmd tea.Cmd
+
+			m.diffView, cmd = m.diffView.Update(msg)
 
 			return m, cmd
 
@@ -530,6 +546,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
+	case panels.DiffRequestMsg:
+		return m, m.loadRevisionDiff(msg.Namespace, msg.DeploymentName)
+
+	case diffLoadedMsg:
+		m.diffView.SetContent(msg.title, msg.oldYAML, msg.newYAML)
+		m.viewMode = ViewDiff
+
+		return m, nil
+
 	case panels.PortForwardRequestMsg:
 		if len(msg.Ports) == 0 {
 			m.statusBar.SetMessage("No ports exposed on this pod")
@@ -654,6 +679,8 @@ func (m *Model) View() string {
 		content = m.yamlView.View(m.width, m.height)
 	case ViewLogs:
 		content = m.logView.View(m.width, m.height)
+	case ViewDiff:
+		content = m.diffView.View(m.width, m.height)
 	case ViewConfirm:
 		content = m.renderNormalView()
 		confirmView := m.confirm.View()
@@ -778,7 +805,7 @@ func (m *Model) renderSwitchView() string {
 		title = "Switch Namespace"
 	case ViewContainerSelect:
 		title = "Select Container"
-	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewConfirm, ViewInput:
+	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewDiff, ViewConfirm, ViewInput:
 		// These view modes don't use renderSwitchView
 	}
 
@@ -1289,6 +1316,60 @@ func (m *Model) rollbackDeployment(namespace, name string) tea.Cmd {
 	}
 }
 
+func (m *Model) loadRevisionDiff(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		revisions, err := m.k8sClient.ListDeploymentRevisions(ctx, namespace, name)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to list revisions: %w", err),
+			}
+		}
+
+		if len(revisions) < 2 {
+			return panels.StatusMsg{
+				Message: fmt.Sprintf(
+					"%s has fewer than 2 revisions — nothing to diff",
+					name,
+				),
+			}
+		}
+
+		// Compare the two most recent revisions (current vs previous)
+		currentYAML, err := m.k8sClient.GetRevisionYAML(
+			ctx, namespace, name, revisions[0].Revision,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to get current revision YAML: %w", err),
+			}
+		}
+
+		previousYAML, err := m.k8sClient.GetRevisionYAML(
+			ctx, namespace, name, revisions[1].Revision,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to get previous revision YAML: %w", err),
+			}
+		}
+
+		title := fmt.Sprintf(
+			"Diff: %s (rev %d → %d)",
+			name,
+			revisions[1].Revision,
+			revisions[0].Revision,
+		)
+
+		return diffLoadedMsg{
+			title:   title,
+			oldYAML: previousYAML,
+			newYAML: currentYAML,
+		}
+	}
+}
+
 func (m *Model) scaleStatefulSet(namespace, name, replicaStr string) tea.Cmd {
 	return func() tea.Msg {
 		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
@@ -1680,6 +1761,12 @@ func (m *Model) fetchMetrics() tea.Cmd {
 			nodeMetrics: nodeMetrics,
 		}
 	}
+}
+
+type diffLoadedMsg struct {
+	title   string
+	oldYAML string
+	newYAML string
 }
 
 type metricsLoadedMsg struct {

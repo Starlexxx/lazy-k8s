@@ -28,6 +28,11 @@ type StatusWithRefreshMsg struct {
 	Message string
 }
 
+type DiffRequestMsg struct {
+	DeploymentName string
+	Namespace      string
+}
+
 type ScaleRequestMsg struct {
 	DeploymentName  string
 	Namespace       string

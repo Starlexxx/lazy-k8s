@@ -34,7 +34,6 @@ func TestListHPAs(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test listing HPAs in default namespace
 	hpas, err := client.ListHPAs(ctx, "default")
 	if err != nil {
 		t.Fatalf("ListHPAs returned unexpected error: %v", err)
@@ -44,7 +43,6 @@ func TestListHPAs(t *testing.T) {
 		t.Errorf("ListHPAs returned %d HPAs, want 2", len(hpas))
 	}
 
-	// Test listing HPAs in other namespace
 	hpas, err = client.ListHPAs(ctx, "other-namespace")
 	if err != nil {
 		t.Fatalf("ListHPAs returned unexpected error: %v", err)
@@ -54,7 +52,6 @@ func TestListHPAs(t *testing.T) {
 		t.Errorf("ListHPAs returned %d HPAs, want 1", len(hpas))
 	}
 
-	// Test listing HPAs with empty namespace (should use client's default)
 	hpas, err = client.ListHPAs(ctx, "")
 	if err != nil {
 		t.Fatalf("ListHPAs returned unexpected error: %v", err)
@@ -117,7 +114,6 @@ func TestGetHPA(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test getting existing HPA
 	hpa, err := client.GetHPA(ctx, "default", "test-hpa")
 	if err != nil {
 		t.Fatalf("GetHPA returned unexpected error: %v", err)
@@ -131,7 +127,6 @@ func TestGetHPA(t *testing.T) {
 		t.Errorf("GetHPA returned HPA with max replicas %d, want 10", hpa.Spec.MaxReplicas)
 	}
 
-	// Test getting non-existent HPA
 	_, err = client.GetHPA(ctx, "default", "non-existent")
 	if err == nil {
 		t.Error("GetHPA should have returned an error for non-existent HPA")
@@ -151,13 +146,11 @@ func TestDeleteHPA(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Delete the HPA
 	err := client.DeleteHPA(ctx, "default", "test-hpa")
 	if err != nil {
 		t.Fatalf("DeleteHPA returned unexpected error: %v", err)
 	}
 
-	// Verify HPA is deleted
 	_, err = client.GetHPA(ctx, "default", "test-hpa")
 	if err == nil {
 		t.Error("HPA should have been deleted")
@@ -177,14 +170,12 @@ func TestWatchHPAs(t *testing.T) {
 	client := createTestClient(clientset)
 	ctx := context.Background()
 
-	// Test creating a watch
 	watcher, err := client.WatchHPAs(ctx, "default")
 	if err != nil {
 		t.Fatalf("WatchHPAs returned unexpected error: %v", err)
 	}
 	defer watcher.Stop()
 
-	// Verify watch channel is available
 	if watcher.ResultChan() == nil {
 		t.Error("WatchHPAs returned watcher with nil ResultChan")
 	}
