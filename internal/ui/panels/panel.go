@@ -95,6 +95,15 @@ type NodeMetrics struct {
 	Memory int64 // in bytes
 }
 
+// SearchResult represents a single resource match from cross-panel global search.
+type SearchResult struct {
+	Name      string
+	Namespace string
+	Kind      string // panel Title(), e.g. "Pods", "Deployments"
+	Status    string // resource-specific status string
+	PanelIdx  int    // set by ui.go when aggregating results
+}
+
 type Panel interface {
 	Init() tea.Cmd
 	Update(msg tea.Msg) (Panel, tea.Cmd)
@@ -113,6 +122,10 @@ type Panel interface {
 	SetAllNamespaces(all bool)
 	GetSelectedYAML() (string, error)
 	GetSelectedDescribe() (string, error)
+	// SearchItems returns matches from the unfiltered item list without mutating panel state.
+	SearchItems(query string) []SearchResult
+	// NavigateTo positions the cursor on the item matching name+namespace.
+	NavigateTo(name, namespace string) bool
 }
 
 type BasePanel struct {

@@ -453,6 +453,41 @@ func (p *HPAPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *HPAPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, hpa := range p.hpas {
+		if strings.Contains(strings.ToLower(hpa.Name), q) {
+			results = append(results, SearchResult{
+				Name:      hpa.Name,
+				Namespace: hpa.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetHPAReplicaCount(&hpa),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *HPAPanel) NavigateTo(name, namespace string) bool {
+	for i, hpa := range p.filtered {
+		if hpa.Name == name && hpa.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type hpaLoadedMsg struct {
 	hpas []autoscalingv2.HorizontalPodAutoscaler
 }

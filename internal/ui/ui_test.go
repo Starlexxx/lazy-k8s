@@ -35,6 +35,7 @@ func TestViewMode(t *testing.T) {
 		{ViewNamespaceSwitch, 7},
 		{ViewContainerSelect, 8},
 		{ViewDiff, 9},
+		{ViewGlobalSearch, 10},
 	}
 
 	for _, tt := range tests {
@@ -1112,5 +1113,510 @@ func TestLoadRevisionDiffWithRevisions(t *testing.T) {
 
 	if !strings.Contains(msg.newYAML, "nginx:1.20") {
 		t.Errorf("newYAML should contain nginx:1.20, got:\n%s", msg.newYAML)
+	}
+}
+
+// createTestModel builds a minimal Model with real panels for global search tests.
+func createTestModel() *Model {
+	styles := theme.NewStyles(&config.ThemeConfig{
+		PrimaryColor:    "#7aa2f7",
+		SecondaryColor:  "#9ece6a",
+		ErrorColor:      "#f7768e",
+		WarningColor:    "#e0af68",
+		BackgroundColor: "#1a1b26",
+		TextColor:       "#c0caf5",
+		BorderColor:     "#3b4261",
+	})
+	keys := theme.NewKeyMap()
+	fakeClientset := fake.NewSimpleClientset()
+	client := k8s.NewTestClient(fakeClientset)
+
+	podsPanel := panels.NewPodsPanel(client, styles)
+	deploysPanel := panels.NewDeploymentsPanel(client, styles)
+
+	return &Model{
+		styles:       styles,
+		keys:         keys,
+		k8sClient:    client,
+		viewMode:     ViewNormal,
+		diffView:     components.NewDiffViewer(styles),
+		globalSearch: components.NewGlobalSearch(styles),
+		panels:       []panels.Panel{podsPanel, deploysPanel},
+		width:        100,
+		height:       30,
+	}
+}
+
+// TestGlobalSearchEscReturnsToNormal tests that Esc in global search
+// returns to normal mode.
+func TestGlobalSearchEscReturnsToNormal(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewNormal {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewNormal)",
+			updated.viewMode, ViewNormal,
+		)
+	}
+}
+
+// TestGlobalSearchQueryTriggersAggregation verifies that typing in the
+// search input triggers result aggregation across panels.
+func TestGlobalSearchQueryTriggersAggregation(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+
+	// Inject pods data into the first panel (PodsPanel)
+	podsPanel, ok := m.panels[0].(*panels.PodsPanel)
+	if !ok {
+		t.Fatal("expected first panel to be PodsPanel")
+	}
+
+	podsPanel.SetTestPods([]corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "nginx-pod", Namespace: "default",
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+	})
+
+	// Type 'n' to trigger query change
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	// Should still be in global search mode
+	if updated.viewMode != ViewGlobalSearch {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewGlobalSearch)",
+			updated.viewMode, ViewGlobalSearch,
+		)
+	}
+
+	// Should have aggregated results from the query
+	if updated.globalSearch.Query() == "" {
+		t.Error("expected non-empty query after typing")
+	}
+}
+
+// TestAggregateSearchResults tests that results from multiple panels
+// are collected with correct PanelIdx values.
+func TestAggregateSearchResults(t *testing.T) {
+	m := createTestModel()
+
+	podsPanel, ok := m.panels[0].(*panels.PodsPanel)
+	if !ok {
+		t.Fatal("expected first panel to be PodsPanel")
+	}
+
+	podsPanel.SetTestPods([]corev1.Pod{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "nginx-web", Namespace: "default",
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodRunning},
+		},
+	})
+
+	deploysPanel, ok := m.panels[1].(*panels.DeploymentsPanel)
+	if !ok {
+		t.Fatal("expected second panel to be DeploymentsPanel")
+	}
+
+	replicas := int32(3)
+
+	deploysPanel.SetTestDeployments([]appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "nginx-deploy", Namespace: "default",
+			},
+			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
+			Status: appsv1.DeploymentStatus{
+				ReadyReplicas: 3, Replicas: 3,
+			},
+		},
+	})
+
+	// Set query and aggregate
+	m.viewMode = ViewGlobalSearch
+
+	m.globalSearch.Reset()
+
+	// Manually set query by typing characters
+	for _, ch := range "nginx" {
+		m.globalSearch.Update(
+			tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}}, 0,
+		)
+	}
+
+	m.aggregateSearchResults()
+
+	if len(m.globalSearchResults) != 2 {
+		t.Errorf(
+			"expected 2 results, got %d",
+			len(m.globalSearchResults),
+		)
+	}
+
+	// First result should have PanelIdx 0 (pods)
+	if m.globalSearchResults[0].PanelIdx != 0 {
+		t.Errorf(
+			"expected PanelIdx 0 for pod, got %d",
+			m.globalSearchResults[0].PanelIdx,
+		)
+	}
+
+	// Second result should have PanelIdx 1 (deployments)
+	if m.globalSearchResults[1].PanelIdx != 1 {
+		t.Errorf(
+			"expected PanelIdx 1 for deployment, got %d",
+			m.globalSearchResults[1].PanelIdx,
+		)
+	}
+}
+
+// TestNavigateToSearchResult verifies that selecting a result switches
+// to the correct panel and positions the cursor.
+func TestNavigateToSearchResult(t *testing.T) {
+	m := createTestModel()
+
+	deploysPanel, ok := m.panels[1].(*panels.DeploymentsPanel)
+	if !ok {
+		t.Fatal("expected second panel to be DeploymentsPanel")
+	}
+
+	replicas := int32(1)
+
+	deploysPanel.SetTestDeployments([]appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "app-a", Namespace: "default",
+			},
+			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "app-b", Namespace: "staging",
+			},
+			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
+		},
+	})
+
+	// Populate filtered list so NavigateTo can find items
+	deploysPanel.SetFilter("")
+
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = []panels.SearchResult{
+		{
+			Name: "app-b", Namespace: "staging",
+			Kind: "Deployments", PanelIdx: 1,
+		},
+	}
+
+	// Cursor at 0 selects first result
+	m.navigateToSearchResult()
+
+	if m.viewMode != ViewNormal {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewNormal)",
+			m.viewMode, ViewNormal,
+		)
+	}
+
+	if m.activePanelIdx != 1 {
+		t.Errorf(
+			"activePanelIdx = %d, want 1",
+			m.activePanelIdx,
+		)
+	}
+
+	if deploysPanel.Cursor() != 1 {
+		t.Errorf(
+			"deploy panel cursor = %d, want 1",
+			deploysPanel.Cursor(),
+		)
+	}
+}
+
+// TestNavigateToSearchResultOutOfBounds verifies safe handling
+// when cursor index is out of range.
+func TestNavigateToSearchResultOutOfBounds(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = nil
+
+	// Should not panic with empty results
+	m.navigateToSearchResult()
+
+	if m.viewMode != ViewGlobalSearch {
+		t.Errorf(
+			"viewMode should stay at ViewGlobalSearch, got %d",
+			m.viewMode,
+		)
+	}
+}
+
+// TestRenderGlobalSearchViewEmpty tests rendering with no results.
+func TestRenderGlobalSearchViewEmpty(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = nil
+
+	output := m.renderGlobalSearchView()
+
+	if !strings.Contains(output, "Global Search") {
+		t.Error("expected output to contain 'Global Search'")
+	}
+}
+
+// TestRenderGlobalSearchViewWithResults tests rendering with results.
+func TestRenderGlobalSearchViewWithResults(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = []panels.SearchResult{
+		{
+			Name: "nginx-pod", Namespace: "default",
+			Kind: "Pods", Status: "Running", PanelIdx: 0,
+		},
+		{
+			Name: "nginx-deploy", Namespace: "staging",
+			Kind: "Deployments", Status: "3/3", PanelIdx: 1,
+		},
+	}
+
+	output := m.renderGlobalSearchView()
+
+	if !strings.Contains(output, "2 results") {
+		t.Error("expected output to contain '2 results'")
+	}
+
+	if !strings.Contains(output, "nginx-pod") {
+		t.Error("expected output to contain 'nginx-pod'")
+	}
+
+	if !strings.Contains(output, "nginx-deploy") {
+		t.Error("expected output to contain 'nginx-deploy'")
+	}
+}
+
+// TestRenderGlobalSearchViewNoMatch tests "No matches" display.
+func TestRenderGlobalSearchViewNoMatch(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = nil
+
+	// Set a non-empty query to trigger "No matches" text
+	m.globalSearch.Reset()
+
+	m.globalSearch.Update(
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}}, 0,
+	)
+
+	output := m.renderGlobalSearchView()
+
+	if !strings.Contains(output, "No matches") {
+		t.Error("expected 'No matches' in output")
+	}
+}
+
+// TestRenderGlobalSearchSmallTerminal tests rendering at small dimensions.
+func TestRenderGlobalSearchSmallTerminal(t *testing.T) {
+	m := createTestModel()
+	m.width = 40
+	m.height = 12
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = []panels.SearchResult{
+		{
+			Name: "my-pod", Namespace: "default",
+			Kind: "Pods", Status: "Running", PanelIdx: 0,
+		},
+	}
+
+	// Should not panic with small terminal
+	output := m.renderGlobalSearchView()
+
+	if !strings.Contains(output, "Global Search") {
+		t.Error("expected output to contain 'Global Search'")
+	}
+}
+
+// TestRenderGlobalSearchScrollbar tests scrollbar appears for many results.
+func TestRenderGlobalSearchScrollbar(t *testing.T) {
+	m := createTestModel()
+	m.width = 100
+	m.height = 15
+	m.viewMode = ViewGlobalSearch
+
+	// Create enough results to require scrolling
+	var results []panels.SearchResult
+
+	for i := 0; i < 30; i++ {
+		results = append(results, panels.SearchResult{
+			Name:      "pod-" + strings.Repeat("x", i),
+			Namespace: "default",
+			Kind:      "Pods",
+			Status:    "Running",
+			PanelIdx:  0,
+		})
+	}
+
+	m.globalSearchResults = results
+
+	output := m.renderGlobalSearchView()
+
+	// Scrollbar indicator uses █ character
+	if !strings.Contains(output, "█") {
+		t.Error("expected scrollbar indicator in output")
+	}
+}
+
+// TestGlobalSearchEnterNavigatesToResult tests Enter key in global search
+// switches to ViewNormal and navigates to the result.
+func TestGlobalSearchEnterNavigatesToResult(t *testing.T) {
+	m := createTestModel()
+
+	deploysPanel, ok := m.panels[1].(*panels.DeploymentsPanel)
+	if !ok {
+		t.Fatal("expected second panel to be DeploymentsPanel")
+	}
+
+	replicas := int32(1)
+
+	deploysPanel.SetTestDeployments([]appsv1.Deployment{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "target-app", Namespace: "default",
+			},
+			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
+		},
+	})
+
+	deploysPanel.SetFilter("")
+
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = []panels.SearchResult{
+		{
+			Name: "target-app", Namespace: "default",
+			Kind: "Deployments", PanelIdx: 1,
+		},
+	}
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewNormal {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewNormal)",
+			updated.viewMode, ViewNormal,
+		)
+	}
+
+	if updated.activePanelIdx != 1 {
+		t.Errorf(
+			"activePanelIdx = %d, want 1",
+			updated.activePanelIdx,
+		)
+	}
+}
+
+// TestGlobalSearchKeyDelegation tests that non-navigation keys
+// are forwarded to the text input.
+func TestGlobalSearchKeyDelegation(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+
+	// Type a character
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewGlobalSearch {
+		t.Errorf(
+			"should remain in ViewGlobalSearch, got %d",
+			updated.viewMode,
+		)
+	}
+
+	if updated.globalSearch.Query() == "" {
+		t.Error("expected query to contain typed character")
+	}
+}
+
+// TestCtrlFOpensGlobalSearch tests that ctrl+f in normal mode
+// opens the global search modal.
+func TestCtrlFOpensGlobalSearch(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewNormal
+
+	// Focus the first panel to avoid nil panic in selectPanel
+	m.panels[0].SetFocused(true)
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlF}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewGlobalSearch {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewGlobalSearch)",
+			updated.viewMode, ViewGlobalSearch,
+		)
+	}
+}
+
+// TestRenderGlobalSearchGroupHeaders tests that results are
+// grouped by kind with header lines.
+func TestRenderGlobalSearchGroupHeaders(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewGlobalSearch
+	m.globalSearchResults = []panels.SearchResult{
+		{
+			Name: "pod-1", Namespace: "default",
+			Kind: "Pods", Status: "Running", PanelIdx: 0,
+		},
+		{
+			Name: "pod-2", Namespace: "default",
+			Kind: "Pods", Status: "Running", PanelIdx: 0,
+		},
+		{
+			Name: "deploy-1", Namespace: "default",
+			Kind: "Deployments", Status: "1/1", PanelIdx: 1,
+		},
+	}
+
+	output := m.renderGlobalSearchView()
+
+	if !strings.Contains(output, "Pods (2)") {
+		t.Error("expected group header 'Pods (2)'")
+	}
+
+	if !strings.Contains(output, "Deployments (1)") {
+		t.Error("expected group header 'Deployments (1)'")
 	}
 }

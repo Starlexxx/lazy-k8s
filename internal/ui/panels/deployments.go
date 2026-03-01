@@ -474,6 +474,48 @@ func (p *DeploymentsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+// SetTestDeployments replaces the deployment list for cross-package testing.
+func (p *DeploymentsPanel) SetTestDeployments(
+	deploys []appsv1.Deployment,
+) {
+	p.deployments = deploys
+}
+
+func (p *DeploymentsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, deploy := range p.deployments {
+		if strings.Contains(strings.ToLower(deploy.Name), q) {
+			results = append(results, SearchResult{
+				Name:      deploy.Name,
+				Namespace: deploy.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetDeploymentReadyCount(&deploy),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *DeploymentsPanel) NavigateTo(name, namespace string) bool {
+	for i, deploy := range p.filtered {
+		if deploy.Name == name && deploy.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type deploymentsLoadedMsg struct {
 	deployments []appsv1.Deployment
 }

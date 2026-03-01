@@ -424,6 +424,41 @@ func (p *DaemonSetsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *DaemonSetsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, ds := range p.daemonsets {
+		if strings.Contains(strings.ToLower(ds.Name), q) {
+			results = append(results, SearchResult{
+				Name:      ds.Name,
+				Namespace: ds.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetDaemonSetReadyCount(&ds),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *DaemonSetsPanel) NavigateTo(name, namespace string) bool {
+	for i, ds := range p.filtered {
+		if ds.Name == name && ds.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type daemonSetsLoadedMsg struct {
 	daemonsets []appsv1.DaemonSet
 }

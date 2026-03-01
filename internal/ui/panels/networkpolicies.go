@@ -415,6 +415,45 @@ func (p *NetworkPoliciesPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *NetworkPoliciesPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, np := range p.networkPolicies {
+		if strings.Contains(strings.ToLower(np.Name), q) {
+			results = append(results, SearchResult{
+				Name:      np.Name,
+				Namespace: np.Namespace,
+				Kind:      p.title,
+				Status: fmt.Sprintf(
+					"%dI/%dE",
+					k8s.GetNetworkPolicyIngressRuleCount(&np),
+					k8s.GetNetworkPolicyEgressRuleCount(&np),
+				),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *NetworkPoliciesPanel) NavigateTo(name, namespace string) bool {
+	for i, np := range p.filtered {
+		if np.Name == name && np.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type networkPoliciesLoadedMsg struct {
 	networkPolicies []networkingv1.NetworkPolicy
 }

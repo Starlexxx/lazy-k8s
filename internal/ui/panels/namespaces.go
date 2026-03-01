@@ -326,6 +326,40 @@ func (p *NamespacesPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *NamespacesPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, ns := range p.namespaces {
+		if strings.Contains(strings.ToLower(ns.Name), q) {
+			results = append(results, SearchResult{
+				Name:   ns.Name,
+				Kind:   p.title,
+				Status: string(ns.Status.Phase),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *NamespacesPanel) NavigateTo(name, _ string) bool {
+	for i, ns := range p.filtered {
+		if ns.Name == name {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type namespacesLoadedMsg struct {
 	namespaces []corev1.Namespace
 }

@@ -398,6 +398,41 @@ func (p *ServicesPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *ServicesPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, svc := range p.services {
+		if strings.Contains(strings.ToLower(svc.Name), q) {
+			results = append(results, SearchResult{
+				Name:      svc.Name,
+				Namespace: svc.Namespace,
+				Kind:      p.title,
+				Status:    string(svc.Spec.Type),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *ServicesPanel) NavigateTo(name, namespace string) bool {
+	for i, svc := range p.filtered {
+		if svc.Name == name && svc.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type servicesLoadedMsg struct {
 	services []corev1.Service
 }

@@ -406,6 +406,41 @@ func (p *PVCPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *PVCPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, pvc := range p.pvcs {
+		if strings.Contains(strings.ToLower(pvc.Name), q) {
+			results = append(results, SearchResult{
+				Name:      pvc.Name,
+				Namespace: pvc.Namespace,
+				Kind:      p.title,
+				Status:    string(pvc.Status.Phase),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *PVCPanel) NavigateTo(name, namespace string) bool {
+	for i, pvc := range p.filtered {
+		if pvc.Name == name && pvc.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type pvcLoadedMsg struct {
 	pvcs []corev1.PersistentVolumeClaim
 }

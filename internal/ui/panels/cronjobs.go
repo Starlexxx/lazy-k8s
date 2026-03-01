@@ -472,6 +472,41 @@ func (p *CronJobsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *CronJobsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, cj := range p.cronjobs {
+		if strings.Contains(strings.ToLower(cj.Name), q) {
+			results = append(results, SearchResult{
+				Name:      cj.Name,
+				Namespace: cj.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetCronJobStatus(&cj),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *CronJobsPanel) NavigateTo(name, namespace string) bool {
+	for i, cj := range p.filtered {
+		if cj.Name == name && cj.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type cronJobsLoadedMsg struct {
 	cronjobs []batchv1.CronJob
 }

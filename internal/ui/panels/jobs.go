@@ -388,6 +388,41 @@ func (p *JobsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *JobsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, job := range p.jobs {
+		if strings.Contains(strings.ToLower(job.Name), q) {
+			results = append(results, SearchResult{
+				Name:      job.Name,
+				Namespace: job.Namespace,
+				Kind:      p.title,
+				Status:    p.getJobStatus(&job),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *JobsPanel) NavigateTo(name, namespace string) bool {
+	for i, job := range p.filtered {
+		if job.Name == name && job.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type jobsLoadedMsg struct {
 	jobs []batchv1.Job
 }

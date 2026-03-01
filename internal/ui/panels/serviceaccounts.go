@@ -380,6 +380,44 @@ func (p *ServiceAccountsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *ServiceAccountsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, sa := range p.serviceAccounts {
+		if strings.Contains(strings.ToLower(sa.Name), q) {
+			results = append(results, SearchResult{
+				Name:      sa.Name,
+				Namespace: sa.Namespace,
+				Kind:      p.title,
+				Status: fmt.Sprintf(
+					"%d secrets",
+					k8s.GetServiceAccountSecretCount(&sa),
+				),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *ServiceAccountsPanel) NavigateTo(name, namespace string) bool {
+	for i, sa := range p.filtered {
+		if sa.Name == name && sa.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type serviceAccountsLoadedMsg struct {
 	serviceAccounts []corev1.ServiceAccount
 }
