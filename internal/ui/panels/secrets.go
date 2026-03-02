@@ -339,6 +339,41 @@ func (p *SecretsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *SecretsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, secret := range p.secrets {
+		if strings.Contains(strings.ToLower(secret.Name), q) {
+			results = append(results, SearchResult{
+				Name:      secret.Name,
+				Namespace: secret.Namespace,
+				Kind:      p.title,
+				Status:    string(secret.Type),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *SecretsPanel) NavigateTo(name, namespace string) bool {
+	for i, secret := range p.filtered {
+		if secret.Name == name && secret.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type secretsLoadedMsg struct {
 	secrets []corev1.Secret
 }

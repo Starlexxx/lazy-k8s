@@ -382,6 +382,40 @@ func (p *PVPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *PVPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, pv := range p.pvs {
+		if strings.Contains(strings.ToLower(pv.Name), q) {
+			results = append(results, SearchResult{
+				Name:   pv.Name,
+				Kind:   p.title,
+				Status: string(pv.Status.Phase),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *PVPanel) NavigateTo(name, _ string) bool {
+	for i, pv := range p.filtered {
+		if pv.Name == name {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type pvLoadedMsg struct {
 	pvs []corev1.PersistentVolume
 }

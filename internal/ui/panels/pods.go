@@ -602,6 +602,46 @@ func (p *PodsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+// SetTestPods replaces the pod list for cross-package testing.
+func (p *PodsPanel) SetTestPods(pods []corev1.Pod) {
+	p.pods = pods
+}
+
+func (p *PodsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, pod := range p.pods {
+		if strings.Contains(strings.ToLower(pod.Name), q) {
+			results = append(results, SearchResult{
+				Name:      pod.Name,
+				Namespace: pod.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetPodStatus(&pod),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *PodsPanel) NavigateTo(name, namespace string) bool {
+	for i, pod := range p.filtered {
+		if pod.Name == name && pod.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type podsLoadedMsg struct {
 	pods []corev1.Pod
 }

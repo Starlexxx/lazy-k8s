@@ -504,6 +504,40 @@ func (p *NodesPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *NodesPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, node := range p.nodes {
+		if strings.Contains(strings.ToLower(node.Name), q) {
+			results = append(results, SearchResult{
+				Name:   node.Name,
+				Kind:   p.title,
+				Status: k8s.GetNodeStatus(&node),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *NodesPanel) NavigateTo(name, _ string) bool {
+	for i, node := range p.filtered {
+		if node.Name == name {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type nodesLoadedMsg struct {
 	nodes []corev1.Node
 }

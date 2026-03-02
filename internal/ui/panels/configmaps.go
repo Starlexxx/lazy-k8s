@@ -340,6 +340,41 @@ func (p *ConfigMapsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *ConfigMapsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, cm := range p.configmaps {
+		if strings.Contains(strings.ToLower(cm.Name), q) {
+			results = append(results, SearchResult{
+				Name:      cm.Name,
+				Namespace: cm.Namespace,
+				Kind:      p.title,
+				Status:    fmt.Sprintf("%d keys", len(cm.Data)),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *ConfigMapsPanel) NavigateTo(name, namespace string) bool {
+	for i, cm := range p.filtered {
+		if cm.Name == name && cm.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type configmapsLoadedMsg struct {
 	configmaps []corev1.ConfigMap
 }

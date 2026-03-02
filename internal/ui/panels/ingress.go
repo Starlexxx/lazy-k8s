@@ -438,6 +438,47 @@ func (p *IngressPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *IngressPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, ing := range p.ingresses {
+		if strings.Contains(strings.ToLower(ing.Name), q) {
+			// Use first host as status summary
+			status := ""
+			if len(ing.Spec.Rules) > 0 {
+				status = ing.Spec.Rules[0].Host
+			}
+
+			results = append(results, SearchResult{
+				Name:      ing.Name,
+				Namespace: ing.Namespace,
+				Kind:      p.title,
+				Status:    status,
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *IngressPanel) NavigateTo(name, namespace string) bool {
+	for i, ing := range p.filtered {
+		if ing.Name == name && ing.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type ingressLoadedMsg struct {
 	ingresses []networkingv1.Ingress
 }

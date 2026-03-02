@@ -403,6 +403,44 @@ func (p *EventsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *EventsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	// Events search on reason, message, and involved object name
+	for _, event := range p.events {
+		if strings.Contains(strings.ToLower(event.Reason), q) ||
+			strings.Contains(strings.ToLower(event.Message), q) ||
+			strings.Contains(strings.ToLower(event.InvolvedObject.Name), q) {
+			results = append(results, SearchResult{
+				Name:      event.Name,
+				Namespace: event.Namespace,
+				Kind:      p.title,
+				Status:    event.Reason,
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *EventsPanel) NavigateTo(name, namespace string) bool {
+	for i, event := range p.filtered {
+		if event.Name == name && event.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type eventsLoadedMsg struct {
 	events []corev1.Event
 }

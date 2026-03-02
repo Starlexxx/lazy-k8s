@@ -43,6 +43,7 @@ const (
 	ViewNamespaceSwitch
 	ViewContainerSelect
 	ViewDiff
+	ViewGlobalSearch
 )
 
 // borderLines is the number of lines used by panel borders (top + bottom).
@@ -105,6 +106,10 @@ type Model struct {
 	execPodName    string
 	execNamespace  string
 
+	// Global search
+	globalSearch        *components.GlobalSearch
+	globalSearchResults []panels.SearchResult
+
 	// Metrics
 	metricsClient *k8s.MetricsClient
 }
@@ -131,6 +136,7 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.diffView = components.NewDiffViewer(styles)
 	m.search = components.NewSearch(styles)
 	m.input = components.NewInput(styles)
+	m.globalSearch = components.NewGlobalSearch(styles)
 
 	// Initialize metrics client (optional - may fail if metrics-server not installed)
 	metricsClient, err := client.NewMetricsClient()
@@ -299,6 +305,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, cmd
 
+		case ViewGlobalSearch:
+			return m.handleGlobalSearch(msg)
+
 		case ViewNormal:
 			// Fall through to normal key handling below
 		}
@@ -340,6 +349,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.Help):
 			m.viewMode = ViewHelp
+
+			return m, nil
+
+		case key.Matches(msg, m.keys.GlobalSearch):
+			m.globalSearch.Reset()
+			m.globalSearchResults = nil
+			m.viewMode = ViewGlobalSearch
 
 			return m, nil
 
@@ -687,6 +703,8 @@ func (m *Model) View() string {
 		content = m.overlayView(content, confirmView)
 	case ViewContextSwitch, ViewNamespaceSwitch, ViewContainerSelect:
 		content = m.renderSwitchView()
+	case ViewGlobalSearch:
+		content = m.renderGlobalSearchView()
 	case ViewInput:
 		content = m.renderNormalView()
 		inputView := m.input.View()
@@ -805,7 +823,8 @@ func (m *Model) renderSwitchView() string {
 		title = "Switch Namespace"
 	case ViewContainerSelect:
 		title = "Select Container"
-	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewDiff, ViewConfirm, ViewInput:
+	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewDiff, ViewConfirm, ViewInput,
+		ViewGlobalSearch:
 		// These view modes don't use renderSwitchView
 	}
 
@@ -1799,4 +1818,307 @@ func convertNodeMetrics(k8sMetrics map[string]k8s.NodeMetrics) map[string]panels
 	}
 
 	return result
+}
+
+// handleGlobalSearch processes key events while the global search modal is open.
+func (m *Model) handleGlobalSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Back) {
+		m.viewMode = ViewNormal
+
+		return m, nil
+	}
+
+	if key.Matches(msg, m.keys.Enter) {
+		m.navigateToSearchResult()
+
+		return m, nil
+	}
+
+	var queryChanged bool
+
+	m.globalSearch, _, queryChanged = m.globalSearch.Update(
+		msg, len(m.globalSearchResults),
+	)
+
+	if queryChanged {
+		m.aggregateSearchResults()
+	}
+
+	return m, nil
+}
+
+// aggregateSearchResults collects matches from all panels for the current query.
+func (m *Model) aggregateSearchResults() {
+	query := m.globalSearch.Query()
+	m.globalSearchResults = nil
+
+	for i, panel := range m.panels {
+		results := panel.SearchItems(query)
+
+		for j := range results {
+			results[j].PanelIdx = i
+		}
+
+		m.globalSearchResults = append(m.globalSearchResults, results...)
+	}
+}
+
+// navigateToSearchResult switches to the panel and item matching the selected result.
+func (m *Model) navigateToSearchResult() {
+	idx := m.globalSearch.Cursor()
+	if idx < 0 || idx >= len(m.globalSearchResults) {
+		return
+	}
+
+	result := m.globalSearchResults[idx]
+
+	m.selectPanel(result.PanelIdx)
+
+	// Clear any active per-panel filter so NavigateTo sees all items
+	m.panels[result.PanelIdx].SetFilter("")
+	m.searchQuery = ""
+	m.searchActive = false
+
+	m.panels[result.PanelIdx].NavigateTo(result.Name, result.Namespace)
+	m.viewMode = ViewNormal
+}
+
+func (m *Model) renderGlobalSearchView() string {
+	// Compute modal dimensions first so all internal widths are relative to it.
+	// Modal border/padding consumes ~6 columns.
+	const modalPadding = 6
+
+	modalWidth := m.width * 3 / 4
+	if modalWidth > m.width-2 {
+		modalWidth = m.width - 2
+	}
+
+	if modalWidth < 30 {
+		modalWidth = 30
+	}
+
+	innerWidth := modalWidth - modalPadding
+	if innerWidth < 20 {
+		innerWidth = 20
+	}
+
+	var b strings.Builder
+
+	title := m.styles.ModalTitle.Render("Global Search")
+
+	hint := m.styles.Muted.Render("↑/↓ • enter • esc")
+
+	b.WriteString(lipgloss.JoinHorizontal(
+		lipgloss.Center, title, "  ", hint,
+	))
+	b.WriteString("\n")
+
+	// Search input
+	b.WriteString(m.globalSearch.InputView())
+	b.WriteString("  ")
+	b.WriteString(m.styles.Muted.Render(
+		fmt.Sprintf("%d results", len(m.globalSearchResults)),
+	))
+	b.WriteString("\n")
+
+	sepWidth := innerWidth
+	if sepWidth < 1 {
+		sepWidth = 1
+	}
+
+	b.WriteString(strings.Repeat("─", sepWidth))
+	b.WriteString("\n")
+
+	// Compute visible area
+	modalHeight := m.height - 2
+	headerLines := 3 // title + input + separator
+	footerLines := 2 // scrollbar + border
+	visibleHeight := modalHeight - headerLines - footerLines
+
+	if visibleHeight < 3 {
+		visibleHeight = 3
+	}
+
+	m.globalSearch.SetVisibleHeight(visibleHeight)
+	cursorIdx := m.globalSearch.Cursor()
+
+	// Build flat display list with group headers interleaved
+	type displayLine struct {
+		isHeader bool
+		text     string
+		resultID int // index into globalSearchResults, -1 for headers
+	}
+
+	var lines []displayLine
+
+	currentKind := ""
+
+	for i, r := range m.globalSearchResults {
+		if r.Kind != currentKind {
+			// Count how many results of this kind exist
+			kindCount := 0
+
+			for _, rr := range m.globalSearchResults {
+				if rr.Kind == r.Kind {
+					kindCount++
+				}
+			}
+
+			currentKind = r.Kind
+			lines = append(lines, displayLine{
+				isHeader: true,
+				text: fmt.Sprintf(
+					"%s (%d)", r.Kind, kindCount,
+				),
+				resultID: -1,
+			})
+		}
+
+		lines = append(lines, displayLine{
+			isHeader: false,
+			resultID: i,
+		})
+	}
+
+	// Map cursor from result index to line index
+	cursorLineIdx := 0
+
+	for li, line := range lines {
+		if !line.isHeader && line.resultID == cursorIdx {
+			cursorLineIdx = li
+
+			break
+		}
+	}
+
+	// Scroll the lines view
+	startLine := m.globalSearch.Offset()
+	if cursorLineIdx < startLine {
+		startLine = cursorLineIdx
+	}
+
+	if cursorLineIdx >= startLine+visibleHeight {
+		startLine = cursorLineIdx - visibleHeight + 1
+	}
+
+	if startLine < 0 {
+		startLine = 0
+	}
+
+	endLine := startLine + visibleHeight
+	if endLine > len(lines) {
+		endLine = len(lines)
+	}
+
+	// Column widths adapt to available space.
+	// Layout: "> name  namespace  status"
+	nsW := 12
+	statusW := 10
+
+	if innerWidth < 60 {
+		nsW = 8
+		statusW = 8
+	}
+
+	// prefix(2) + name + gap(2) + ns + gap(2) + status
+	maxNameW := innerWidth - 2 - 2 - nsW - 2 - statusW
+	if maxNameW < 8 {
+		maxNameW = 8
+	}
+
+	for li := startLine; li < endLine; li++ {
+		line := lines[li]
+
+		if line.isHeader {
+			b.WriteString(m.styles.DetailTitle.Render(line.text))
+			b.WriteString("\n")
+
+			continue
+		}
+
+		r := m.globalSearchResults[line.resultID]
+		isSelected := line.resultID == cursorIdx
+
+		var prefix string
+		if isSelected {
+			prefix = "> "
+		} else {
+			prefix = "  "
+		}
+
+		name := r.Name
+		if len(name) > maxNameW {
+			name = name[:maxNameW-3] + "..."
+		}
+
+		ns := r.Namespace
+		if len(ns) > nsW {
+			ns = ns[:nsW-2] + ".."
+		}
+
+		status := r.Status
+		if len(status) > statusW {
+			status = status[:statusW-2] + ".."
+		}
+
+		entry := prefix + fmt.Sprintf(
+			"%-*s  %-*s  %s",
+			maxNameW, name, nsW, ns, status,
+		)
+
+		if isSelected {
+			b.WriteString(m.styles.ListItemFocused.Render(entry))
+		} else {
+			b.WriteString(m.styles.ListItem.Render(entry))
+		}
+
+		b.WriteString("\n")
+	}
+
+	if len(m.globalSearchResults) == 0 && m.globalSearch.Query() != "" {
+		b.WriteString(m.styles.Muted.Render("  No matches"))
+		b.WriteString("\n")
+	}
+
+	// Scrollbar
+	if len(lines) > visibleHeight {
+		barWidth := innerWidth - 4
+		if barWidth < 3 {
+			barWidth = 3
+		}
+
+		scrollPos := float64(startLine) / float64(
+			len(lines)-visibleHeight,
+		)
+
+		leftWidth := int(float64(barWidth) * scrollPos)
+		if leftWidth < 0 {
+			leftWidth = 0
+		}
+
+		if leftWidth > barWidth {
+			leftWidth = barWidth
+		}
+
+		rightWidth := barWidth - leftWidth - 1
+		if rightWidth < 0 {
+			rightWidth = 0
+		}
+
+		indicator := strings.Repeat("─", leftWidth) +
+			"█" + strings.Repeat("─", rightWidth)
+
+		b.WriteString("\n")
+		b.WriteString(m.styles.Muted.Render(indicator))
+	}
+
+	content := m.styles.Modal.
+		Width(modalWidth).
+		Render(b.String())
+
+	return lipgloss.Place(
+		m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
 }

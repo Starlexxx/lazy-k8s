@@ -454,6 +454,41 @@ func (p *StatefulSetsPanel) SetFilter(query string) {
 	p.applyFilter()
 }
 
+func (p *StatefulSetsPanel) SearchItems(query string) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, sts := range p.statefulsets {
+		if strings.Contains(strings.ToLower(sts.Name), q) {
+			results = append(results, SearchResult{
+				Name:      sts.Name,
+				Namespace: sts.Namespace,
+				Kind:      p.title,
+				Status:    k8s.GetStatefulSetReadyCount(&sts),
+			})
+		}
+	}
+
+	return results
+}
+
+func (p *StatefulSetsPanel) NavigateTo(name, namespace string) bool {
+	for i, sts := range p.filtered {
+		if sts.Name == name && sts.Namespace == namespace {
+			p.cursor = i
+
+			return true
+		}
+	}
+
+	return false
+}
+
 type statefulSetsLoadedMsg struct {
 	statefulsets []appsv1.StatefulSet
 }
