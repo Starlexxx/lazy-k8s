@@ -53,6 +53,7 @@ type KeyMap struct {
 	FollowLogs   key.Binding
 	Diff         key.Binding
 	GlobalSearch key.Binding
+	History      key.Binding
 }
 
 func NewKeyMap() *KeyMap {
@@ -204,6 +205,10 @@ func NewKeyMap() *KeyMap {
 			key.WithKeys("ctrl+f"),
 			key.WithHelp("ctrl+f", "global search"),
 		),
+		History: key.NewBinding(
+			key.WithKeys("H"),
+			key.WithHelp("H", "history"),
+		),
 	}
 }
 
@@ -215,7 +220,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.NextPanel, k.PrevPanel, k.Top, k.Bottom},
-		{k.Enter, k.Back, k.Zoom, k.Search, k.GlobalSearch, k.Refresh},
+		{k.Enter, k.Back, k.Zoom, k.Search, k.GlobalSearch, k.History, k.Refresh},
 		{k.Describe, k.Yaml, k.Logs, k.Exec},
 		{k.Delete, k.Scale, k.Restart, k.PortForward, k.Diff},
 		{k.Context, k.Namespace, k.CopyName, k.Copy},

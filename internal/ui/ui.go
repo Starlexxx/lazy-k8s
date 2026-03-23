@@ -44,6 +44,7 @@ const (
 	ViewContainerSelect
 	ViewDiff
 	ViewGlobalSearch
+	ViewHistory
 )
 
 // borderLines is the number of lines used by panel borders (top + bottom).
@@ -112,6 +113,10 @@ type Model struct {
 
 	// Metrics
 	metricsClient *k8s.MetricsClient
+
+	// Operations history
+	historyStore *components.HistoryStore
+	historyView  *components.HistoryViewer
 }
 
 func NewModel(client *k8s.Client, cfg *config.Config) *Model {
@@ -137,6 +142,8 @@ func NewModel(client *k8s.Client, cfg *config.Config) *Model {
 	m.search = components.NewSearch(styles)
 	m.input = components.NewInput(styles)
 	m.globalSearch = components.NewGlobalSearch(styles)
+	m.historyStore = components.NewHistoryStore()
+	m.historyView = components.NewHistoryViewer(styles, m.historyStore)
 
 	// Initialize metrics client (optional - may fail if metrics-server not installed)
 	metricsClient, err := client.NewMetricsClient()
@@ -308,6 +315,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ViewGlobalSearch:
 			return m.handleGlobalSearch(msg)
 
+		case ViewHistory:
+			if key.Matches(msg, m.keys.Back) {
+				m.viewMode = ViewNormal
+
+				return m, nil
+			}
+
+			var cmd tea.Cmd
+
+			m.historyView, cmd = m.historyView.Update(msg)
+
+			return m, cmd
+
 		case ViewNormal:
 			// Fall through to normal key handling below
 		}
@@ -356,6 +376,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.globalSearch.Reset()
 			m.globalSearchResults = nil
 			m.viewMode = ViewGlobalSearch
+
+			return m, nil
+
+		case key.Matches(msg, m.keys.History):
+			m.historyView.Reset()
+			m.viewMode = ViewHistory
 
 			return m, nil
 
@@ -534,12 +560,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.DeploymentName,
 			msg.CurrentReplicas,
 		)
+		currentReplicas := msg.CurrentReplicas
+
 		m.showInput(
 			"Scale Deployment",
 			description,
 			strconv.Itoa(int(msg.CurrentReplicas)),
 			func(value string) tea.Cmd {
-				return m.scaleDeployment(msg.Namespace, msg.DeploymentName, value)
+				return m.scaleDeployment(
+					msg.Namespace, msg.DeploymentName,
+					value, currentReplicas,
+				)
 			},
 		)
 		m.input.SetValue(strconv.Itoa(int(msg.CurrentReplicas)))
@@ -618,12 +649,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.StatefulSetName,
 			msg.CurrentReplicas,
 		)
+		currentReplicas := msg.CurrentReplicas
+
 		m.showInput(
 			"Scale StatefulSet",
 			description,
 			strconv.Itoa(int(msg.CurrentReplicas)),
 			func(value string) tea.Cmd {
-				return m.scaleStatefulSet(msg.Namespace, msg.StatefulSetName, value)
+				return m.scaleStatefulSet(
+					msg.Namespace, msg.StatefulSetName,
+					value, currentReplicas,
+				)
 			},
 		)
 		m.input.SetValue(strconv.Itoa(int(msg.CurrentReplicas)))
@@ -636,12 +672,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.HPAName,
 			msg.MinReplicas,
 		)
+		currentMin := msg.MinReplicas
+
 		m.showInput(
 			"Edit HPA Min Replicas",
 			description,
 			strconv.Itoa(int(msg.MinReplicas)),
 			func(value string) tea.Cmd {
-				return m.updateHPAMinReplicas(msg.Namespace, msg.HPAName, value)
+				return m.updateHPAMinReplicas(
+					msg.Namespace, msg.HPAName, value, currentMin,
+				)
 			},
 		)
 		m.input.SetValue(strconv.Itoa(int(msg.MinReplicas)))
@@ -654,17 +694,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.HPAName,
 			msg.MaxReplicas,
 		)
+		currentMax := msg.MaxReplicas
+
 		m.showInput(
 			"Edit HPA Max Replicas",
 			description,
 			strconv.Itoa(int(msg.MaxReplicas)),
 			func(value string) tea.Cmd {
-				return m.updateHPAMaxReplicas(msg.Namespace, msg.HPAName, value)
+				return m.updateHPAMaxReplicas(
+					msg.Namespace, msg.HPAName, value, currentMax,
+				)
 			},
 		)
 		m.input.SetValue(strconv.Itoa(int(msg.MaxReplicas)))
 
 		return m, nil
+
+	case panels.RestartDeploymentRequestMsg:
+		return m, m.restartDeployment(msg.Namespace, msg.DeploymentName)
+
+	case panels.RestartStatefulSetRequestMsg:
+		return m, m.restartStatefulSet(msg.Namespace, msg.StatefulSetName)
+
+	case panels.RestartDaemonSetRequestMsg:
+		return m, m.restartDaemonSet(msg.Namespace, msg.DaemonSetName)
+
+	case panels.ToggleSuspendCronJobRequestMsg:
+		return m, m.toggleSuspendCronJob(
+			msg.Namespace, msg.CronJobName, msg.CurrentSuspend,
+		)
+
+	case panels.TriggerCronJobRequestMsg:
+		return m, m.triggerCronJob(msg.Namespace, msg.CronJobName)
+
+	case components.UndoRequestMsg:
+		return m, m.handleUndo(msg.RecordID)
 	}
 
 	// Update ALL panels so they can process their respective loaded messages
@@ -705,6 +769,8 @@ func (m *Model) View() string {
 		content = m.renderSwitchView()
 	case ViewGlobalSearch:
 		content = m.renderGlobalSearchView()
+	case ViewHistory:
+		content = m.historyView.View(m.width, m.height)
 	case ViewInput:
 		content = m.renderNormalView()
 		inputView := m.input.View()
@@ -824,7 +890,7 @@ func (m *Model) renderSwitchView() string {
 	case ViewContainerSelect:
 		title = "Select Container"
 	case ViewNormal, ViewHelp, ViewYaml, ViewLogs, ViewDiff, ViewConfirm, ViewInput,
-		ViewGlobalSearch:
+		ViewGlobalSearch, ViewHistory:
 		// These view modes don't use renderSwitchView
 	}
 
@@ -1261,11 +1327,28 @@ func (m *Model) confirmDelete() (*Model, tea.Cmd) {
 		return m, nil
 	}
 
+	panelTitle := activePanel.Title()
+	ns := m.k8sClient.CurrentNamespace()
+
 	m.confirm.Show(
 		fmt.Sprintf("Delete %s?", name),
-		fmt.Sprintf("Are you sure you want to delete %s? This action cannot be undone.", name),
+		fmt.Sprintf(
+			"Are you sure you want to delete %s? "+
+				"This action cannot be undone.", name,
+		),
 		func() tea.Cmd {
-			return activePanel.Delete()
+			cmd := activePanel.Delete()
+
+			m.historyStore.Add(components.OperationRecord{
+				Type:      components.OpDeleteResource,
+				Resource:  name,
+				Namespace: ns,
+				Message: fmt.Sprintf(
+					"Deleted %s %s", panelTitle, name,
+				),
+			})
+
+			return cmd
 		},
 	)
 	m.viewMode = ViewConfirm
@@ -1299,25 +1382,68 @@ func (m *Model) showInput(title, description, placeholder string, action func(st
 	m.viewMode = ViewInput
 }
 
-func (m *Model) scaleDeployment(namespace, name, replicaStr string) tea.Cmd {
-	return func() tea.Msg {
-		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
-		if err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
+// parseReplicaCount parses a replica string and validates it against
+// a minimum value. Returns the parsed count or an error message.
+func parseReplicaCount(
+	replicaStr string,
+	minValue int64,
+	minErr error,
+) (int32, tea.Msg) {
+	replicas, err := strconv.ParseInt(replicaStr, 10, 32)
+	if err != nil {
+		return 0, panels.ErrorMsg{
+			Error: fmt.Errorf("invalid replica count: %w", err),
 		}
+	}
 
-		if replicas < 0 {
-			return panels.ErrorMsg{Error: ErrInvalidReplicaCount}
+	if replicas < minValue {
+		return 0, panels.ErrorMsg{Error: minErr}
+	}
+
+	return int32(replicas), nil
+}
+
+func (m *Model) scaleDeployment(
+	namespace, name, replicaStr string,
+	currentReplicas int32,
+) tea.Cmd {
+	return func() tea.Msg {
+		replicas, errMsg := parseReplicaCount(
+			replicaStr, 0, ErrInvalidReplicaCount,
+		)
+		if errMsg != nil {
+			return errMsg
 		}
 
 		ctx := context.Background()
-		if err := m.k8sClient.ScaleDeployment(ctx, namespace, name, int32(replicas)); err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale deployment: %w", err)}
+
+		err := m.k8sClient.ScaleDeployment(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to scale deployment: %w", err),
+			}
 		}
 
-		// Return status with refresh to show updated pods
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpScaleDeployment,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Scaled %s from %d to %d replicas",
+				name, currentReplicas, replicas,
+			),
+			Undoable: true,
+			UndoData: components.UndoData{
+				PreviousReplicas: currentReplicas,
+			},
+		})
+
 		return panels.StatusWithRefreshMsg{
-			Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas),
+			Message: fmt.Sprintf(
+				"Scaled %s to %d replicas", name, replicas,
+			),
 		}
 	}
 }
@@ -1326,8 +1452,19 @@ func (m *Model) rollbackDeployment(namespace, name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		if err := m.k8sClient.RollbackDeployment(ctx, namespace, name); err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("failed to rollback deployment: %w", err)}
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("failed to rollback deployment: %w", err),
+			}
 		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpRollbackDeployment,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Rolled back %s to previous revision", name,
+			),
+		})
 
 		return panels.StatusWithRefreshMsg{
 			Message: fmt.Sprintf("Rolled back %s to previous revision", name),
@@ -1389,76 +1526,143 @@ func (m *Model) loadRevisionDiff(namespace, name string) tea.Cmd {
 	}
 }
 
-func (m *Model) scaleStatefulSet(namespace, name, replicaStr string) tea.Cmd {
+func (m *Model) scaleStatefulSet(
+	namespace, name, replicaStr string,
+	currentReplicas int32,
+) tea.Cmd {
 	return func() tea.Msg {
-		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
-		if err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
-		}
-
-		if replicas < 0 {
-			return panels.ErrorMsg{Error: ErrInvalidReplicaCount}
+		replicas, errMsg := parseReplicaCount(
+			replicaStr, 0, ErrInvalidReplicaCount,
+		)
+		if errMsg != nil {
+			return errMsg
 		}
 
 		ctx := context.Background()
-		if err := m.k8sClient.ScaleStatefulSet(ctx, namespace, name, int32(replicas)); err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("failed to scale statefulset: %w", err)}
+
+		err := m.k8sClient.ScaleStatefulSet(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to scale statefulset: %w", err,
+				),
+			}
 		}
 
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpScaleStatefulSet,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Scaled %s from %d to %d replicas",
+				name, currentReplicas, replicas,
+			),
+			Undoable: true,
+			UndoData: components.UndoData{
+				PreviousReplicas: currentReplicas,
+			},
+		})
+
 		return panels.StatusWithRefreshMsg{
-			Message: fmt.Sprintf("Scaled %s to %d replicas", name, replicas),
+			Message: fmt.Sprintf(
+				"Scaled %s to %d replicas", name, replicas,
+			),
 		}
 	}
 }
 
-func (m *Model) updateHPAMinReplicas(namespace, name, replicaStr string) tea.Cmd {
+func (m *Model) updateHPAMinReplicas(
+	namespace, name, replicaStr string,
+	currentMin int32,
+) tea.Cmd {
 	return func() tea.Msg {
-		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
-		if err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
-		}
-
-		if replicas < 1 {
-			return panels.ErrorMsg{Error: ErrMinReplicasTooLow}
+		replicas, errMsg := parseReplicaCount(
+			replicaStr, 1, ErrMinReplicasTooLow,
+		)
+		if errMsg != nil {
+			return errMsg
 		}
 
 		ctx := context.Background()
 
-		err = m.k8sClient.UpdateHPAMinReplicas(ctx, namespace, name, int32(replicas))
+		err := m.k8sClient.UpdateHPAMinReplicas(
+			ctx, namespace, name, replicas,
+		)
 		if err != nil {
 			return panels.ErrorMsg{
-				Error: fmt.Errorf("failed to update HPA min replicas: %w", err),
+				Error: fmt.Errorf(
+					"failed to update HPA min replicas: %w", err,
+				),
 			}
 		}
 
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpEditHPAMin,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Updated %s min replicas from %d to %d",
+				name, currentMin, replicas,
+			),
+			Undoable: true,
+			UndoData: components.UndoData{
+				PreviousMinReplicas: currentMin,
+			},
+		})
+
 		return panels.StatusWithRefreshMsg{
-			Message: fmt.Sprintf("Updated %s min replicas to %d", name, replicas),
+			Message: fmt.Sprintf(
+				"Updated %s min replicas to %d", name, replicas,
+			),
 		}
 	}
 }
 
-func (m *Model) updateHPAMaxReplicas(namespace, name, replicaStr string) tea.Cmd {
+func (m *Model) updateHPAMaxReplicas(
+	namespace, name, replicaStr string,
+	currentMax int32,
+) tea.Cmd {
 	return func() tea.Msg {
-		replicas, err := strconv.ParseInt(replicaStr, 10, 32)
-		if err != nil {
-			return panels.ErrorMsg{Error: fmt.Errorf("invalid replica count: %w", err)}
-		}
-
-		if replicas < 1 {
-			return panels.ErrorMsg{Error: ErrMaxReplicasTooLow}
+		replicas, errMsg := parseReplicaCount(
+			replicaStr, 1, ErrMaxReplicasTooLow,
+		)
+		if errMsg != nil {
+			return errMsg
 		}
 
 		ctx := context.Background()
 
-		err = m.k8sClient.UpdateHPAMaxReplicas(ctx, namespace, name, int32(replicas))
+		err := m.k8sClient.UpdateHPAMaxReplicas(
+			ctx, namespace, name, replicas,
+		)
 		if err != nil {
 			return panels.ErrorMsg{
-				Error: fmt.Errorf("failed to update HPA max replicas: %w", err),
+				Error: fmt.Errorf(
+					"failed to update HPA max replicas: %w", err,
+				),
 			}
 		}
 
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpEditHPAMax,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Updated %s max replicas from %d to %d",
+				name, currentMax, replicas,
+			),
+			Undoable: true,
+			UndoData: components.UndoData{
+				PreviousMaxReplicas: currentMax,
+			},
+		})
+
 		return panels.StatusWithRefreshMsg{
-			Message: fmt.Sprintf("Updated %s max replicas to %d", name, replicas),
+			Message: fmt.Sprintf(
+				"Updated %s max replicas to %d", name, replicas,
+			),
 		}
 	}
 }
@@ -1503,8 +1707,21 @@ func (m *Model) startPortForward(namespace, podName, portSpec string) tea.Cmd {
 		key := fmt.Sprintf("%s/%s:%d", namespace, podName, remotePort)
 		m.portForwards[key] = pf
 
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpPortForward,
+			Resource:  podName,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Port forwarding %d -> %s:%d",
+				localPort, podName, remotePort,
+			),
+		})
+
 		return panels.StatusMsg{
-			Message: fmt.Sprintf("Port forwarding %d -> %s:%d", localPort, podName, remotePort),
+			Message: fmt.Sprintf(
+				"Port forwarding %d -> %s:%d",
+				localPort, podName, remotePort,
+			),
 		}
 	}
 }
@@ -1583,6 +1800,15 @@ func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
 }
 
 func (m *Model) execIntoPod(namespace, podName, container string) tea.Cmd {
+	m.historyStore.Add(components.OperationRecord{
+		Type:      components.OpExec,
+		Resource:  podName,
+		Namespace: namespace,
+		Message: fmt.Sprintf(
+			"Exec into %s (container: %s)", podName, container,
+		),
+	})
+
 	args := []string{
 		"exec", "-it",
 		"-n", namespace,
@@ -1592,20 +1818,22 @@ func (m *Model) execIntoPod(namespace, podName, container string) tea.Cmd {
 		"if command -v bash > /dev/null; then exec bash; else exec sh; fi",
 	}
 
-	c := tea.ExecProcess(
+	return tea.ExecProcess(
 		newKubectlCmd(args...),
 		func(err error) tea.Msg {
 			if err != nil {
-				return panels.ErrorMsg{Error: fmt.Errorf("exec failed: %w", err)}
+				return panels.ErrorMsg{
+					Error: fmt.Errorf("exec failed: %w", err),
+				}
 			}
 
 			return panels.StatusMsg{
-				Message: fmt.Sprintf("Exited shell in %s/%s", podName, container),
+				Message: fmt.Sprintf(
+					"Exited shell in %s/%s", podName, container,
+				),
 			}
 		},
 	)
-
-	return c
 }
 
 func (m *Model) copyNameToClipboard() (*Model, tea.Cmd) {
@@ -1738,6 +1966,17 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 			}
 		}
 
+		ns := m.k8sClient.CurrentNamespace()
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpEditResource,
+			Resource:  name,
+			Namespace: ns,
+			Message: fmt.Sprintf(
+				"Edited and applied changes to %s", name,
+			),
+		})
+
 		return panels.StatusWithRefreshMsg{
 			Message: fmt.Sprintf("Applied changes to %s", name),
 		}
@@ -1746,6 +1985,311 @@ func (m *Model) editResource() (*Model, tea.Cmd) {
 
 func newKubectlCmd(args ...string) *exec.Cmd {
 	return exec.Command("kubectl", args...) //nolint:noctx
+}
+
+func (m *Model) restartDeployment(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.RestartDeployment(ctx, namespace, name)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to restart deployment: %w", err,
+				),
+			}
+		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpRestartDeployment,
+			Resource:  name,
+			Namespace: namespace,
+			Message:   fmt.Sprintf("Restarted deployment %s", name),
+		})
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Restarted deployment: %s", name),
+		}
+	}
+}
+
+func (m *Model) restartStatefulSet(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.RestartStatefulSet(ctx, namespace, name)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to restart statefulset: %w", err,
+				),
+			}
+		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpRestartStatefulSet,
+			Resource:  name,
+			Namespace: namespace,
+			Message:   fmt.Sprintf("Restarted statefulset %s", name),
+		})
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Restarted statefulset: %s", name),
+		}
+	}
+}
+
+func (m *Model) restartDaemonSet(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.RestartDaemonSet(ctx, namespace, name)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to restart daemonset: %w", err,
+				),
+			}
+		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpRestartDaemonSet,
+			Resource:  name,
+			Namespace: namespace,
+			Message:   fmt.Sprintf("Restarted daemonset %s", name),
+		})
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Restarted daemonset: %s", name),
+		}
+	}
+}
+
+func (m *Model) toggleSuspendCronJob(
+	namespace, name string,
+	currentSuspend bool,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		newSuspend := !currentSuspend
+
+		err := m.k8sClient.SuspendCronJob(
+			ctx, namespace, name, newSuspend,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to toggle suspend cronjob: %w", err,
+				),
+			}
+		}
+
+		opType := components.OpSuspendCronJob
+		action := "Suspended"
+
+		if !newSuspend {
+			opType = components.OpResumeCronJob
+			action = "Resumed"
+		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      opType,
+			Resource:  name,
+			Namespace: namespace,
+			Message:   fmt.Sprintf("%s cronjob %s", action, name),
+			Undoable:  true,
+			UndoData: components.UndoData{
+				PreviousSuspend: currentSuspend,
+			},
+		})
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("%s cronjob: %s", action, name),
+		}
+	}
+}
+
+func (m *Model) triggerCronJob(namespace, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		job, err := m.k8sClient.TriggerCronJob(ctx, namespace, name)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"failed to trigger cronjob: %w", err,
+				),
+			}
+		}
+
+		m.historyStore.Add(components.OperationRecord{
+			Type:      components.OpTriggerCronJob,
+			Resource:  name,
+			Namespace: namespace,
+			Message: fmt.Sprintf(
+				"Triggered cronjob %s (job: %s)", name, job.Name,
+			),
+		})
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf("Triggered job: %s", job.Name),
+		}
+	}
+}
+
+// handleUndo reverses a previously recorded operation when possible.
+func (m *Model) handleUndo(recordID int) tea.Cmd {
+	rec, ok := m.historyStore.Get(recordID)
+	if !ok || !rec.Undoable || rec.Undone {
+		return nil
+	}
+
+	m.historyStore.MarkUndone(recordID)
+
+	switch rec.Type {
+	case components.OpScaleDeployment:
+		return m.undoScaleDeployment(
+			rec.Namespace, rec.Resource,
+			rec.UndoData.PreviousReplicas,
+		)
+	case components.OpScaleStatefulSet:
+		return m.undoScaleStatefulSet(
+			rec.Namespace, rec.Resource,
+			rec.UndoData.PreviousReplicas,
+		)
+	case components.OpSuspendCronJob, components.OpResumeCronJob:
+		return m.toggleSuspendCronJob(
+			rec.Namespace, rec.Resource,
+			!rec.UndoData.PreviousSuspend,
+		)
+	case components.OpEditHPAMin:
+		return m.undoHPAMinReplicas(
+			rec.Namespace, rec.Resource,
+			rec.UndoData.PreviousMinReplicas,
+		)
+	case components.OpEditHPAMax:
+		return m.undoHPAMaxReplicas(
+			rec.Namespace, rec.Resource,
+			rec.UndoData.PreviousMaxReplicas,
+		)
+	case components.OpRestartDeployment,
+		components.OpRestartStatefulSet,
+		components.OpRestartDaemonSet,
+		components.OpRollbackDeployment,
+		components.OpDeleteResource,
+		components.OpPortForward,
+		components.OpExec,
+		components.OpEditResource,
+		components.OpTriggerCronJob:
+		// These operations are not reversible
+		return nil
+	}
+
+	return nil
+}
+
+func (m *Model) undoScaleDeployment(
+	namespace, name string,
+	replicas int32,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.ScaleDeployment(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("undo scale failed: %w", err),
+			}
+		}
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf(
+				"Undone: restored %s to %d replicas",
+				name, replicas,
+			),
+		}
+	}
+}
+
+func (m *Model) undoScaleStatefulSet(
+	namespace, name string,
+	replicas int32,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.ScaleStatefulSet(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf("undo scale failed: %w", err),
+			}
+		}
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf(
+				"Undone: restored %s to %d replicas",
+				name, replicas,
+			),
+		}
+	}
+}
+
+func (m *Model) undoHPAMinReplicas(
+	namespace, name string,
+	replicas int32,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.UpdateHPAMinReplicas(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"undo HPA min replicas failed: %w", err,
+				),
+			}
+		}
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf(
+				"Undone: restored %s min replicas to %d",
+				name, replicas,
+			),
+		}
+	}
+}
+
+func (m *Model) undoHPAMaxReplicas(
+	namespace, name string,
+	replicas int32,
+) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+
+		err := m.k8sClient.UpdateHPAMaxReplicas(
+			ctx, namespace, name, replicas,
+		)
+		if err != nil {
+			return panels.ErrorMsg{
+				Error: fmt.Errorf(
+					"undo HPA max replicas failed: %w", err,
+				),
+			}
+		}
+
+		return panels.StatusWithRefreshMsg{
+			Message: fmt.Sprintf(
+				"Undone: restored %s max replicas to %d",
+				name, replicas,
+			),
+		}
+	}
 }
 
 func (m *Model) metricsTickCmd() tea.Cmd {

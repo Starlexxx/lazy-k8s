@@ -70,7 +70,18 @@ func (p *StatefulSetsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 				}
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			return p, p.restartStatefulSet()
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			sts := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return RestartStatefulSetRequestMsg{
+					StatefulSetName: sts.Name,
+					Namespace:       sts.Namespace,
+				}
+			}
 		}
 
 	case statefulSetsLoadedMsg:
@@ -298,25 +309,6 @@ func (p *StatefulSetsPanel) Delete() tea.Cmd {
 		}
 
 		return StatusMsg{Message: fmt.Sprintf("Deleted statefulset: %s", sts.Name)}
-	}
-}
-
-func (p *StatefulSetsPanel) restartStatefulSet() tea.Cmd {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	sts := p.filtered[p.cursor]
-
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		err := p.client.RestartStatefulSet(ctx, sts.Namespace, sts.Name)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-
-		return StatusMsg{Message: fmt.Sprintf("Restarted statefulset: %s", sts.Name)}
 	}
 }
 

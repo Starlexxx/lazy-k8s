@@ -70,7 +70,18 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 				}
 			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			return p, p.restartDeployment()
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			deploy := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return RestartDeploymentRequestMsg{
+					DeploymentName: deploy.Name,
+					Namespace:      deploy.Namespace,
+				}
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("R"))):
 			if p.cursor >= len(p.filtered) {
 				return p, nil
@@ -328,25 +339,6 @@ func (p *DeploymentsPanel) Delete() tea.Cmd {
 		}
 
 		return StatusMsg{Message: fmt.Sprintf("Deleted deployment: %s", deploy.Name)}
-	}
-}
-
-func (p *DeploymentsPanel) restartDeployment() tea.Cmd {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	deploy := p.filtered[p.cursor]
-
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		err := p.client.RestartDeployment(ctx, deploy.Namespace, deploy.Name)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-
-		return StatusMsg{Message: fmt.Sprintf("Restarted deployment: %s", deploy.Name)}
 	}
 }
 

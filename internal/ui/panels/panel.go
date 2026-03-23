@@ -74,6 +74,38 @@ type EditHPAMaxReplicasRequestMsg struct {
 	MaxReplicas int32
 }
 
+// RestartDeploymentRequestMsg is emitted by the deployments panel
+// so ui.go can execute the restart and record it in history.
+type RestartDeploymentRequestMsg struct {
+	DeploymentName string
+	Namespace      string
+}
+
+// RestartStatefulSetRequestMsg is emitted by the statefulsets panel.
+type RestartStatefulSetRequestMsg struct {
+	StatefulSetName string
+	Namespace       string
+}
+
+// RestartDaemonSetRequestMsg is emitted by the daemonsets panel.
+type RestartDaemonSetRequestMsg struct {
+	DaemonSetName string
+	Namespace     string
+}
+
+// ToggleSuspendCronJobRequestMsg is emitted by the cronjobs panel.
+type ToggleSuspendCronJobRequestMsg struct {
+	CronJobName    string
+	Namespace      string
+	CurrentSuspend bool
+}
+
+// TriggerCronJobRequestMsg is emitted by the cronjobs panel.
+type TriggerCronJobRequestMsg struct {
+	CronJobName string
+	Namespace   string
+}
+
 type PodMetricsMsg struct {
 	Metrics map[string]PodMetrics
 }
