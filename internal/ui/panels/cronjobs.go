@@ -51,9 +51,37 @@ func (p *CronJobsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			p.MoveToBottom(len(p.filtered))
 		case key.Matches(msg, key.NewBinding(key.WithKeys("t"))):
-			return p, p.triggerCronJob()
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			cj := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return TriggerCronJobRequestMsg{
+					CronJobName: cj.Name,
+					Namespace:   cj.Namespace,
+				}
+			}
 		case key.Matches(msg, key.NewBinding(key.WithKeys("S"))):
-			return p, p.toggleSuspend()
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			cj := p.filtered[p.cursor]
+
+			currentSuspend := false
+			if cj.Spec.Suspend != nil {
+				currentSuspend = *cj.Spec.Suspend
+			}
+
+			return p, func() tea.Msg {
+				return ToggleSuspendCronJobRequestMsg{
+					CronJobName:    cj.Name,
+					Namespace:      cj.Namespace,
+					CurrentSuspend: currentSuspend,
+				}
+			}
 		}
 
 	case cronJobsLoadedMsg:
@@ -315,56 +343,6 @@ func (p *CronJobsPanel) Delete() tea.Cmd {
 		}
 
 		return StatusMsg{Message: fmt.Sprintf("Deleted cronjob: %s", cj.Name)}
-	}
-}
-
-func (p *CronJobsPanel) triggerCronJob() tea.Cmd {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	cj := p.filtered[p.cursor]
-
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		job, err := p.client.TriggerCronJob(ctx, cj.Namespace, cj.Name)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-
-		return StatusMsg{Message: fmt.Sprintf("Triggered job: %s", job.Name)}
-	}
-}
-
-func (p *CronJobsPanel) toggleSuspend() tea.Cmd {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	cj := p.filtered[p.cursor]
-
-	currentSuspend := false
-	if cj.Spec.Suspend != nil {
-		currentSuspend = *cj.Spec.Suspend
-	}
-
-	newSuspend := !currentSuspend
-
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		err := p.client.SuspendCronJob(ctx, cj.Namespace, cj.Name, newSuspend)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-
-		action := "Suspended"
-		if !newSuspend {
-			action = "Resumed"
-		}
-
-		return StatusMsg{Message: fmt.Sprintf("%s cronjob: %s", action, cj.Name)}
 	}
 }
 

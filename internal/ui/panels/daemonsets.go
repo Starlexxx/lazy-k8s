@@ -51,7 +51,18 @@ func (p *DaemonSetsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 		case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
 			p.MoveToBottom(len(p.filtered))
 		case key.Matches(msg, key.NewBinding(key.WithKeys("r"))):
-			return p, p.restartDaemonSet()
+			if p.cursor >= len(p.filtered) {
+				return p, nil
+			}
+
+			ds := p.filtered[p.cursor]
+
+			return p, func() tea.Msg {
+				return RestartDaemonSetRequestMsg{
+					DaemonSetName: ds.Name,
+					Namespace:     ds.Namespace,
+				}
+			}
 		}
 
 	case daemonSetsLoadedMsg:
@@ -275,25 +286,6 @@ func (p *DaemonSetsPanel) Delete() tea.Cmd {
 		}
 
 		return StatusMsg{Message: fmt.Sprintf("Deleted daemonset: %s", ds.Name)}
-	}
-}
-
-func (p *DaemonSetsPanel) restartDaemonSet() tea.Cmd {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	ds := p.filtered[p.cursor]
-
-	return func() tea.Msg {
-		ctx := context.Background()
-
-		err := p.client.RestartDaemonSet(ctx, ds.Namespace, ds.Name)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-
-		return StatusMsg{Message: fmt.Sprintf("Restarted daemonset: %s", ds.Name)}
 	}
 }
 

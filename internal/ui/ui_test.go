@@ -1134,6 +1134,8 @@ func createTestModel() *Model {
 	podsPanel := panels.NewPodsPanel(client, styles)
 	deploysPanel := panels.NewDeploymentsPanel(client, styles)
 
+	historyStore := components.NewHistoryStore()
+
 	return &Model{
 		styles:       styles,
 		keys:         keys,
@@ -1141,7 +1143,10 @@ func createTestModel() *Model {
 		viewMode:     ViewNormal,
 		diffView:     components.NewDiffViewer(styles),
 		globalSearch: components.NewGlobalSearch(styles),
+		historyStore: historyStore,
+		historyView:  components.NewHistoryViewer(styles, historyStore),
 		panels:       []panels.Panel{podsPanel, deploysPanel},
+		portForwards: make(map[string]*k8s.PortForwarder),
 		width:        100,
 		height:       30,
 	}
@@ -1618,5 +1623,537 @@ func TestRenderGlobalSearchGroupHeaders(t *testing.T) {
 
 	if !strings.Contains(output, "Deployments (1)") {
 		t.Error("expected group header 'Deployments (1)'")
+	}
+}
+
+// TestViewModeHistory verifies ViewHistory constant.
+func TestViewModeHistory(t *testing.T) {
+	if int(ViewHistory) != 11 {
+		t.Errorf("ViewHistory = %d, want 11", int(ViewHistory))
+	}
+}
+
+// TestHistoryKeyOpensHistoryView tests that pressing H opens history.
+func TestHistoryKeyOpensHistoryView(t *testing.T) {
+	m := createTestModel()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'H'}}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewHistory {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewHistory)",
+			updated.viewMode, ViewHistory,
+		)
+	}
+}
+
+// TestHistoryEscReturnsToNormal tests that Esc closes history.
+func TestHistoryEscReturnsToNormal(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewHistory
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	if updated.viewMode != ViewNormal {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewNormal)",
+			updated.viewMode, ViewNormal,
+		)
+	}
+}
+
+// TestHistoryViewRendering tests that ViewHistory renders correctly.
+func TestHistoryViewRendering(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewHistory
+
+	output := m.View()
+
+	if !strings.Contains(output, "Operations History") {
+		t.Error("expected 'Operations History' title in output")
+	}
+}
+
+// TestScaleDeploymentRecordsHistory tests that scaling errors
+// don't record history. The fake clientset doesn't support GetScale
+// subresource, so we verify the error path.
+func TestScaleDeploymentRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	// Fake clientset doesn't support GetScale, so this will error
+	cmd := m.scaleDeployment("default", "nginx", "5", 3)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg from fake client, got %T", result)
+	}
+
+	if m.historyStore.Len() != 0 {
+		t.Error("history should not be recorded on error")
+	}
+}
+
+// TestScaleDeploymentInvalidInput tests error on bad input.
+func TestScaleDeploymentInvalidInput(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.scaleDeployment("default", "nginx", "abc", 3)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg, got %T", result)
+	}
+
+	if m.historyStore.Len() != 0 {
+		t.Error("history should not be recorded on error")
+	}
+}
+
+// TestScaleDeploymentNegativeInput tests error on negative input.
+func TestScaleDeploymentNegativeInput(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.scaleDeployment("default", "nginx", "-1", 3)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg, got %T", result)
+	}
+}
+
+// TestScaleStatefulSetRecordsHistory tests that scaling errors
+// don't record history.
+func TestScaleStatefulSetRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.scaleStatefulSet("default", "redis", "3", 1)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg from fake client, got %T", result)
+	}
+
+	if m.historyStore.Len() != 0 {
+		t.Error("history should not be recorded on error")
+	}
+}
+
+// TestRollbackDeploymentRecordsHistory tests rollback recording.
+func TestRollbackDeploymentRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.rollbackDeployment("default", "nginx")
+	result := cmd()
+
+	// Rollback will fail on fake client (no revisions), but let's
+	// test that errors don't record history.
+	switch result.(type) {
+	case panels.ErrorMsg:
+		if m.historyStore.Len() != 0 {
+			t.Error("history should not be recorded on error")
+		}
+	case panels.StatusWithRefreshMsg:
+		if m.historyStore.Len() != 1 {
+			t.Error("expected 1 history record on success")
+		}
+	default:
+		t.Fatalf("unexpected msg type %T", result)
+	}
+}
+
+// TestRestartDeploymentRecordsHistory tests restart recording.
+func TestRestartDeploymentRecordsHistory(t *testing.T) {
+	fakeClientset := fake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+			},
+		},
+	)
+	client := k8s.NewTestClient(fakeClientset)
+	m := createTestModel()
+	m.k8sClient = client
+
+	cmd := m.restartDeployment("default", "nginx")
+	result := cmd()
+
+	_, ok := result.(panels.StatusWithRefreshMsg)
+	if !ok {
+		t.Fatalf("expected StatusWithRefreshMsg, got %T", result)
+	}
+
+	if m.historyStore.Len() != 1 {
+		t.Fatalf("expected 1 history record, got %d", m.historyStore.Len())
+	}
+
+	rec, _ := m.historyStore.Get(0)
+	if rec.Type != components.OpRestartDeployment {
+		t.Errorf("expected OpRestartDeployment, got %d", rec.Type)
+	}
+
+	if rec.Undoable {
+		t.Error("restart should not be undoable")
+	}
+}
+
+// TestRestartStatefulSetRecordsHistory tests statefulset restart.
+func TestRestartStatefulSetRecordsHistory(t *testing.T) {
+	fakeClientset := fake.NewSimpleClientset(
+		&appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "redis",
+				Namespace: "default",
+			},
+		},
+	)
+	client := k8s.NewTestClient(fakeClientset)
+	m := createTestModel()
+	m.k8sClient = client
+
+	cmd := m.restartStatefulSet("default", "redis")
+	result := cmd()
+
+	_, ok := result.(panels.StatusWithRefreshMsg)
+	if !ok {
+		t.Fatalf("expected StatusWithRefreshMsg, got %T", result)
+	}
+
+	if m.historyStore.Len() != 1 {
+		t.Fatalf("expected 1 history record, got %d", m.historyStore.Len())
+	}
+}
+
+// TestRestartDaemonSetRecordsHistory tests daemonset restart.
+func TestRestartDaemonSetRecordsHistory(t *testing.T) {
+	fakeClientset := fake.NewSimpleClientset(
+		&appsv1.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fluentd",
+				Namespace: "default",
+			},
+		},
+	)
+	client := k8s.NewTestClient(fakeClientset)
+	m := createTestModel()
+	m.k8sClient = client
+
+	cmd := m.restartDaemonSet("default", "fluentd")
+	result := cmd()
+
+	_, ok := result.(panels.StatusWithRefreshMsg)
+	if !ok {
+		t.Fatalf("expected StatusWithRefreshMsg, got %T", result)
+	}
+
+	if m.historyStore.Len() != 1 {
+		t.Fatalf("expected 1 history record, got %d", m.historyStore.Len())
+	}
+
+	rec, _ := m.historyStore.Get(0)
+	if rec.Type != components.OpRestartDaemonSet {
+		t.Errorf("expected OpRestartDaemonSet, got %d", rec.Type)
+	}
+}
+
+// TestToggleSuspendCronJobRecordsHistory tests suspend toggle.
+func TestToggleSuspendCronJobRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.toggleSuspendCronJob("default", "cleanup", false)
+	result := cmd()
+
+	// Will fail on fake client without the cronjob, but test the error path.
+	switch result.(type) {
+	case panels.ErrorMsg:
+		if m.historyStore.Len() != 0 {
+			t.Error("history should not be recorded on error")
+		}
+	case panels.StatusWithRefreshMsg:
+		if m.historyStore.Len() != 1 {
+			t.Error("expected 1 history record on success")
+		}
+	default:
+		t.Fatalf("unexpected msg type %T", result)
+	}
+}
+
+// TestUpdateHPAMinReplicasRecordsHistory tests HPA min update.
+func TestUpdateHPAMinReplicasRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.updateHPAMinReplicas("default", "web-hpa", "2", 1)
+	result := cmd()
+
+	// Will fail on fake client, but test error path.
+	switch result.(type) {
+	case panels.ErrorMsg:
+		if m.historyStore.Len() != 0 {
+			t.Error("history should not be recorded on error")
+		}
+	case panels.StatusWithRefreshMsg:
+		if m.historyStore.Len() != 1 {
+			t.Error("expected 1 history record on success")
+		}
+	default:
+		t.Fatalf("unexpected msg type %T", result)
+	}
+}
+
+// TestUpdateHPAMinReplicasInvalidInput tests error on bad input.
+func TestUpdateHPAMinReplicasInvalidInput(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.updateHPAMinReplicas("default", "hpa", "0", 1)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg for 0 min replicas, got %T", result)
+	}
+}
+
+// TestUpdateHPAMaxReplicasInvalidInput tests error on bad input.
+func TestUpdateHPAMaxReplicasInvalidInput(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.updateHPAMaxReplicas("default", "hpa", "0", 5)
+	result := cmd()
+
+	_, ok := result.(panels.ErrorMsg)
+	if !ok {
+		t.Fatalf("expected ErrorMsg for 0 max replicas, got %T", result)
+	}
+}
+
+// TestParseReplicaCount tests the helper function.
+func TestParseReplicaCount(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		min     int64
+		wantErr bool
+		want    int32
+	}{
+		{"valid", "5", 0, false, 5},
+		{"zero allowed", "0", 0, false, 0},
+		{"below min", "0", 1, true, 0},
+		{"negative", "-1", 0, true, 0},
+		{"invalid string", "abc", 0, true, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, errMsg := parseReplicaCount(
+				tt.input, tt.min, ErrInvalidReplicaCount,
+			)
+			if tt.wantErr {
+				if errMsg == nil {
+					t.Error("expected error message")
+				}
+			} else {
+				if errMsg != nil {
+					t.Errorf("unexpected error: %v", errMsg)
+				}
+
+				if got != tt.want {
+					t.Errorf("got %d, want %d", got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestHandleUndoScaleDeployment tests the undo flow.
+func TestHandleUndoScaleDeployment(t *testing.T) {
+	m := createTestModel()
+
+	// Add a history entry directly
+	m.historyStore.Add(components.OperationRecord{
+		Type:      components.OpScaleDeployment,
+		Resource:  "nginx",
+		Namespace: "default",
+		Undoable:  true,
+		UndoData: components.UndoData{
+			PreviousReplicas: 3,
+		},
+	})
+
+	// Undo returns a command (it will fail on fake client, but
+	// the record should still be marked undone)
+	undoCmd := m.handleUndo(0)
+	if undoCmd == nil {
+		t.Fatal("expected undo command")
+	}
+
+	rec, _ := m.historyStore.Get(0)
+	if !rec.Undone {
+		t.Error("expected record to be marked as undone")
+	}
+}
+
+// TestHandleUndoInvalidID tests undo with invalid record ID.
+func TestHandleUndoInvalidID(t *testing.T) {
+	m := createTestModel()
+
+	cmd := m.handleUndo(999)
+	if cmd != nil {
+		t.Error("expected nil cmd for invalid record ID")
+	}
+}
+
+// TestHandleUndoNonUndoable tests undo on non-undoable record.
+func TestHandleUndoNonUndoable(t *testing.T) {
+	m := createTestModel()
+
+	m.historyStore.Add(components.OperationRecord{
+		Type:     components.OpDeleteResource,
+		Resource: "pod",
+		Undoable: false,
+	})
+
+	cmd := m.handleUndo(0)
+	if cmd != nil {
+		t.Error("expected nil cmd for non-undoable record")
+	}
+}
+
+// TestHandleUndoAlreadyUndone tests undo on already-undone record.
+func TestHandleUndoAlreadyUndone(t *testing.T) {
+	m := createTestModel()
+
+	id := m.historyStore.Add(components.OperationRecord{
+		Type:     components.OpScaleDeployment,
+		Resource: "nginx",
+		Undoable: true,
+	})
+
+	m.historyStore.MarkUndone(id)
+
+	cmd := m.handleUndo(id)
+	if cmd != nil {
+		t.Error("expected nil cmd for already-undone record")
+	}
+}
+
+// TestRestartRequestMsgHandling tests that restart msgs are handled.
+func TestRestartRequestMsgHandling(t *testing.T) {
+	fakeClientset := fake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+			},
+		},
+	)
+	client := k8s.NewTestClient(fakeClientset)
+	m := createTestModel()
+	m.k8sClient = client
+
+	msg := panels.RestartDeploymentRequestMsg{
+		DeploymentName: "nginx",
+		Namespace:      "default",
+	}
+
+	_, cmd := m.Update(msg)
+	if cmd == nil {
+		t.Fatal("expected command from restart request")
+	}
+
+	result := cmd()
+
+	_, ok := result.(panels.StatusWithRefreshMsg)
+	if !ok {
+		t.Fatalf("expected StatusWithRefreshMsg, got %T", result)
+	}
+}
+
+// TestUndoRequestMsgHandling tests that UndoRequestMsg is handled.
+func TestUndoRequestMsgHandling(t *testing.T) {
+	m := createTestModel()
+
+	// Create a history entry
+	m.historyStore.Add(components.OperationRecord{
+		Type:      components.OpScaleDeployment,
+		Resource:  "nginx",
+		Namespace: "default",
+		Undoable:  true,
+		UndoData: components.UndoData{
+			PreviousReplicas: 3,
+		},
+	})
+
+	msg := components.UndoRequestMsg{RecordID: 0}
+	_, cmd := m.Update(msg)
+
+	if cmd == nil {
+		t.Fatal("expected command from undo request")
+	}
+}
+
+// TestHistoryNavigationInHistoryView tests j/k navigation.
+func TestHistoryNavigationInHistoryView(t *testing.T) {
+	m := createTestModel()
+	m.viewMode = ViewHistory
+
+	m.historyStore.Add(components.OperationRecord{
+		Type: components.OpDeleteResource, Resource: "a",
+	})
+	m.historyStore.Add(components.OperationRecord{
+		Type: components.OpDeleteResource, Resource: "b",
+	})
+
+	// Press j to move down
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}
+	result, _ := m.Update(msg)
+
+	updated, ok := result.(*Model)
+	if !ok {
+		t.Fatal("Update should return *Model")
+	}
+
+	// Should still be in ViewHistory
+	if updated.viewMode != ViewHistory {
+		t.Errorf(
+			"viewMode = %d, want %d (ViewHistory)",
+			updated.viewMode, ViewHistory,
+		)
+	}
+}
+
+// TestExecRecordsHistory tests that exec records history.
+func TestExecRecordsHistory(t *testing.T) {
+	m := createTestModel()
+
+	// execIntoPod records history before launching the process
+	_ = m.execIntoPod("default", "test-pod", "main")
+
+	if m.historyStore.Len() != 1 {
+		t.Fatalf("expected 1 history record, got %d", m.historyStore.Len())
+	}
+
+	rec, _ := m.historyStore.Get(0)
+	if rec.Type != components.OpExec {
+		t.Errorf("expected OpExec, got %d", rec.Type)
+	}
+
+	if rec.Resource != "test-pod" {
+		t.Errorf("expected resource test-pod, got %s", rec.Resource)
 	}
 }
