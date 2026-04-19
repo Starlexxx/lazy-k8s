@@ -14,6 +14,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 
 	"github.com/Starlexxx/lazy-k8s/internal/config"
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
@@ -1297,22 +1299,59 @@ func (m *Model) showLogs() (*Model, tea.Cmd) {
 
 	activePanel := m.panels[m.activePanelIdx]
 
-	podPanel, ok := activePanel.(*panels.PodsPanel)
+	// Single-pod logs keep the original code path; workload panels fan out
+	// across every pod matched by the workload's pod selector.
+	if podPanel, ok := activePanel.(*panels.PodsPanel); ok {
+		pod := podPanel.SelectedPod()
+		if pod == nil {
+			return m, nil
+		}
+
+		m.viewMode = ViewLogs
+		cmd := m.logView.Start(m.k8sClient, pod.Namespace, pod.Name, "")
+
+		return m, cmd
+	}
+
+	kind, name, namespace, selector, ok := workloadLogTarget(activePanel.SelectedItem())
 	if !ok {
-		m.statusBar.SetMessage("Logs only available for pods")
+		m.statusBar.SetMessage("Logs not available for this resource")
 
 		return m, nil
 	}
 
-	pod := podPanel.SelectedPod()
-	if pod == nil {
+	if selector == "" {
+		m.statusBar.SetError(fmt.Sprintf("%s %s has no pod selector", kind, name))
+
 		return m, nil
 	}
 
 	m.viewMode = ViewLogs
-	cmd := m.logView.Start(m.k8sClient, pod.Namespace, pod.Name, "")
+	cmd := m.logView.StartMulti(m.k8sClient, namespace, kind, name, selector)
 
 	return m, cmd
+}
+
+// workloadLogTarget extracts the workload kind/name/namespace/selector for a
+// selected panel item. Returns ok=false when item is nil or isn't a workload
+// type we know how to fan out logs over.
+func workloadLogTarget(item any) (kind, name, namespace, selector string, ok bool) {
+	if item == nil {
+		return "", "", "", "", false
+	}
+
+	switch v := item.(type) {
+	case *appsv1.Deployment:
+		return "Deployment", v.Name, v.Namespace, k8s.GetDeploymentPodSelector(v), true
+	case *appsv1.StatefulSet:
+		return "StatefulSet", v.Name, v.Namespace, k8s.GetStatefulSetPodSelector(v), true
+	case *appsv1.DaemonSet:
+		return "DaemonSet", v.Name, v.Namespace, k8s.GetDaemonSetPodSelector(v), true
+	case *batchv1.Job:
+		return "Job", v.Name, v.Namespace, k8s.GetJobPodSelector(v), true
+	}
+
+	return "", "", "", "", false
 }
 
 func (m *Model) confirmDelete() (*Model, tea.Cmd) {

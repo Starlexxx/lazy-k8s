@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,15 +20,18 @@ type LogLineMsg struct {
 }
 
 type LogViewer struct {
-	styles       *theme.Styles
-	lines        []string
-	offset       int
-	width        int
-	height       int
-	follow       bool
-	pod          string
-	namespace    string
-	container    string
+	styles    *theme.Styles
+	lines     []string
+	offset    int
+	width     int
+	height    int
+	follow    bool
+	pod       string
+	namespace string
+	container string
+	// title overrides "Logs: <pod>" when streaming from multiple pods
+	// (e.g. "Logs: Deployment/my-app (3 pods)"). Empty in single-pod mode.
+	title        string
 	cancel       context.CancelFunc
 	maxLines     int
 	searchActive bool
@@ -61,6 +65,7 @@ func (l *LogViewer) Start(client *k8s.Client, namespace, pod, container string) 
 	l.pod = pod
 	l.namespace = namespace
 	l.container = container
+	l.title = ""
 	l.lines = make([]string, 0)
 	l.offset = 0
 
@@ -97,6 +102,64 @@ func (l *LogViewer) Start(client *k8s.Client, namespace, pod, container string) 
 
 		return LogLineMsg{Line: logs}
 	}
+}
+
+// StartMulti tails logs from every pod matching selector, prefixing each line
+// with the pod name so multiplexed output is readable. The title reflects the
+// owning workload ("Logs: Deployment/my-app (3 pods)") rather than a pod name.
+//
+// If no pods match the selector, returns a status line instead of silent
+// emptiness — a label typo is the common reason and empty UI hides it.
+func (l *LogViewer) StartMulti(
+	client *k8s.Client,
+	namespace, workloadKind, workloadName, selector string,
+) tea.Cmd {
+	l.pod = ""
+	l.namespace = namespace
+	l.container = ""
+	l.title = "Logs: " + workloadKind + "/" + workloadName
+	l.lines = make([]string, 0)
+	l.offset = 0
+
+	ctx, cancel := context.WithCancel(context.Background())
+	l.cancel = cancel
+
+	return func() tea.Msg {
+		pods, err := client.ListPodsBySelector(ctx, namespace, selector)
+		if err != nil {
+			return LogLineMsg{Error: err}
+		}
+
+		if len(pods) == 0 {
+			return LogLineMsg{Line: "No pods match selector: " + selector + "\n"}
+		}
+
+		names := make([]string, 0, len(pods))
+		for _, p := range pods {
+			names = append(names, p.Name)
+		}
+
+		// Update the header count now that we know how many pods matched.
+		l.title = "Logs: " + workloadKind + "/" + workloadName +
+			" (" + podCountLabel(len(names)) + ")"
+
+		logs, err := client.GetPodsLogSnapshot(ctx, namespace, names, k8s.LogOptions{
+			TailLines: 100,
+		})
+		if err != nil {
+			return LogLineMsg{Error: err}
+		}
+
+		return LogLineMsg{Line: logs}
+	}
+}
+
+func podCountLabel(n int) string {
+	if n == 1 {
+		return "1 pod"
+	}
+
+	return strconv.Itoa(n) + " pods"
 }
 
 func (l *LogViewer) Stop() {
@@ -288,7 +351,12 @@ func (l *LogViewer) View(width, height int) string {
 
 	var b strings.Builder
 
-	title := l.styles.ModalTitle.Render("Logs: " + l.pod)
+	titleText := l.title
+	if titleText == "" {
+		titleText = "Logs: " + l.pod
+	}
+
+	title := l.styles.ModalTitle.Render(titleText)
 
 	followIndicator := ""
 	if l.follow {

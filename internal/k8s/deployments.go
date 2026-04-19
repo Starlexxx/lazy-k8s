@@ -290,6 +290,17 @@ func GetDeploymentReadyCount(deployment *appsv1.Deployment) string {
 	return fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, *deployment.Spec.Replicas)
 }
 
+// GetDeploymentPodSelector renders the deployment's pod label selector as a
+// string usable with List(ListOptions{LabelSelector: ...}). An empty selector
+// means the deployment matches everything in its namespace (rare but valid).
+func GetDeploymentPodSelector(deployment *appsv1.Deployment) string {
+	if deployment.Spec.Selector == nil {
+		return ""
+	}
+
+	return metav1.FormatLabelSelector(deployment.Spec.Selector)
+}
+
 func GetDeploymentImages(deployment *appsv1.Deployment) []string {
 	images := make([]string, 0)
 	for _, container := range deployment.Spec.Template.Spec.Containers {

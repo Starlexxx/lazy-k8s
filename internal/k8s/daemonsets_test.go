@@ -2,13 +2,53 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
+
+func TestGetDaemonSetPodSelector(t *testing.T) {
+	ds := &appsv1.DaemonSet{
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "node-agent"},
+			},
+		},
+	}
+
+	got := GetDaemonSetPodSelector(ds)
+	if !strings.Contains(got, "app=node-agent") {
+		t.Errorf("GetDaemonSetPodSelector = %q, want app=node-agent", got)
+	}
+
+	if GetDaemonSetPodSelector(&appsv1.DaemonSet{}) != "" {
+		t.Error("GetDaemonSetPodSelector on empty DaemonSet should return empty string")
+	}
+}
+
+func TestGetJobPodSelector(t *testing.T) {
+	job := &batchv1.Job{
+		Spec: batchv1.JobSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"controller-uid": "abc-123"},
+			},
+		},
+	}
+
+	got := GetJobPodSelector(job)
+	if !strings.Contains(got, "controller-uid=abc-123") {
+		t.Errorf("GetJobPodSelector = %q, want controller-uid=abc-123", got)
+	}
+
+	if GetJobPodSelector(&batchv1.Job{}) != "" {
+		t.Error("GetJobPodSelector on empty Job should return empty string")
+	}
+}
 
 func TestListDaemonSets(t *testing.T) {
 	clientset := fake.NewSimpleClientset(

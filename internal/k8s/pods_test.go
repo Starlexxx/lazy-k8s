@@ -75,6 +75,53 @@ func TestListPods(t *testing.T) {
 	}
 }
 
+func TestListPodsBySelector(t *testing.T) {
+	clientset := fake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "api-1",
+				Namespace: "default",
+				Labels:    map[string]string{"app": "api"},
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "api-2",
+				Namespace: "default",
+				Labels:    map[string]string{"app": "api"},
+			},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "worker-1",
+				Namespace: "default",
+				Labels:    map[string]string{"app": "worker"},
+			},
+		},
+	)
+
+	client := createTestClient(clientset)
+	ctx := context.Background()
+
+	pods, err := client.ListPodsBySelector(ctx, "default", "app=api")
+	if err != nil {
+		t.Fatalf("ListPodsBySelector returned error: %v", err)
+	}
+
+	if len(pods) != 2 {
+		t.Errorf("ListPodsBySelector returned %d pods, want 2", len(pods))
+	}
+
+	pods, err = client.ListPodsBySelector(ctx, "default", "app=worker")
+	if err != nil {
+		t.Fatalf("ListPodsBySelector returned error: %v", err)
+	}
+
+	if len(pods) != 1 {
+		t.Errorf("ListPodsBySelector returned %d pods, want 1", len(pods))
+	}
+}
+
 func TestListPodsAllNamespaces(t *testing.T) {
 	clientset := fake.NewSimpleClientset(
 		&corev1.Pod{

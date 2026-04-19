@@ -265,7 +265,7 @@ func (p *StatefulSetsPanel) DetailView(width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [d]escribe [y]aml [D]elete"))
+	b.WriteString(p.styles.Muted.Render("[s]cale [r]estart [l]ogs [d]escribe [y]aml [D]elete"))
 
 	return b.String()
 }

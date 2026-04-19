@@ -483,3 +483,42 @@ type testError struct{}
 func (e *testError) Error() string {
 	return "test error"
 }
+
+func TestPodCountLabel(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{1, "1 pod"},
+		{0, "0 pods"},
+		{3, "3 pods"},
+		{42, "42 pods"},
+	}
+
+	for _, tt := range tests {
+		if got := podCountLabel(tt.n); got != tt.want {
+			t.Errorf("podCountLabel(%d) = %q, want %q", tt.n, got, tt.want)
+		}
+	}
+}
+
+// TestLogViewerViewUsesMultiTitle verifies that when title is set (multi-pod
+// mode) the rendered view uses it rather than the single pod-name fallback.
+func TestLogViewerViewUsesMultiTitle(t *testing.T) {
+	styles := createTestStyles()
+	viewer := NewLogViewer(styles)
+
+	viewer.pod = "should-not-appear"
+	viewer.title = "Logs: Deployment/my-app (3 pods)"
+	viewer.lines = []string{"log line"}
+
+	view := viewer.View(120, 20)
+
+	if !strings.Contains(view, "Deployment/my-app") {
+		t.Errorf("expected multi-pod title in view, got:\n%s", view)
+	}
+
+	if strings.Contains(view, "should-not-appear") {
+		t.Error("single-pod fallback rendered despite title being set")
+	}
+}

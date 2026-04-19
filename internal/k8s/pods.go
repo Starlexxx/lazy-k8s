@@ -52,6 +52,26 @@ func (c *Client) ListPodsAllNamespaces(ctx context.Context) ([]corev1.Pod, error
 	return list.Items, nil
 }
 
+// ListPodsBySelector returns pods matching the given label selector in a namespace.
+// An empty selector matches every pod in the namespace (server-side behavior).
+func (c *Client) ListPodsBySelector(
+	ctx context.Context,
+	namespace, selector string,
+) ([]corev1.Pod, error) {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+
+	list, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return list.Items, nil
+}
+
 func (c *Client) GetPod(ctx context.Context, namespace, name string) (*corev1.Pod, error) {
 	if namespace == "" {
 		namespace = c.namespace

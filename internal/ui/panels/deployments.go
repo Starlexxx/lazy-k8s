@@ -293,7 +293,7 @@ func (p *DeploymentsPanel) DetailView(width, height int) string {
 	b.WriteString("\n")
 	b.WriteString(
 		p.styles.Muted.Render(
-			"[s]cale [r]estart [R]ollback [V]ersion diff [d]escribe [y]aml [D]elete",
+			"[s]cale [r]estart [R]ollback [V]ersion diff [l]ogs [d]escribe [y]aml [D]elete",
 		),
 	)
 
