@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -9,6 +10,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
+
+func TestGetStatefulSetPodSelector(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "db"},
+			},
+		},
+	}
+
+	got := GetStatefulSetPodSelector(sts)
+	if !strings.Contains(got, "app=db") {
+		t.Errorf("GetStatefulSetPodSelector = %q, want it to contain app=db", got)
+	}
+
+	if GetStatefulSetPodSelector(&appsv1.StatefulSet{}) != "" {
+		t.Error("GetStatefulSetPodSelector on empty StatefulSet should return empty string")
+	}
+}
 
 func TestListStatefulSets(t *testing.T) {
 	clientset := fake.NewSimpleClientset(

@@ -242,7 +242,7 @@ func (p *DaemonSetsPanel) DetailView(width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(p.styles.Muted.Render("[r]estart [d]escribe [y]aml [D]elete"))
+	b.WriteString(p.styles.Muted.Render("[r]estart [l]ogs [d]escribe [y]aml [D]elete"))
 
 	return b.String()
 }

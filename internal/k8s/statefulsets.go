@@ -113,6 +113,16 @@ func GetStatefulSetReadyCount(sts *appsv1.StatefulSet) string {
 	return fmt.Sprintf("%d/%d", sts.Status.ReadyReplicas, desired)
 }
 
+// GetStatefulSetPodSelector returns the StatefulSet's pod selector as a string
+// usable with List(ListOptions{LabelSelector: ...}).
+func GetStatefulSetPodSelector(sts *appsv1.StatefulSet) string {
+	if sts.Spec.Selector == nil {
+		return ""
+	}
+
+	return metav1.FormatLabelSelector(sts.Spec.Selector)
+}
+
 func GetStatefulSetImages(sts *appsv1.StatefulSet) []string {
 	images := make([]string, 0)
 	for _, container := range sts.Spec.Template.Spec.Containers {

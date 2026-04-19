@@ -80,6 +80,16 @@ func (c *Client) RestartDaemonSet(ctx context.Context, namespace, name string) e
 	return err
 }
 
+// GetDaemonSetPodSelector returns the DaemonSet's pod selector as a string
+// usable with List(ListOptions{LabelSelector: ...}).
+func GetDaemonSetPodSelector(ds *appsv1.DaemonSet) string {
+	if ds.Spec.Selector == nil {
+		return ""
+	}
+
+	return metav1.FormatLabelSelector(ds.Spec.Selector)
+}
+
 func GetDaemonSetReadyCount(ds *appsv1.DaemonSet) string {
 	return fmt.Sprintf("%d/%d", ds.Status.NumberReady, ds.Status.DesiredNumberScheduled)
 }

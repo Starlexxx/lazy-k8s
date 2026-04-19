@@ -16,6 +16,25 @@ func int32Ptr(i int32) *int32 {
 	return &i
 }
 
+func TestGetDeploymentPodSelector(t *testing.T) {
+	d := &appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "demo", "tier": "web"},
+			},
+		},
+	}
+
+	got := GetDeploymentPodSelector(d)
+	if !strings.Contains(got, "app=demo") || !strings.Contains(got, "tier=web") {
+		t.Errorf("GetDeploymentPodSelector = %q, want both app=demo and tier=web", got)
+	}
+
+	if GetDeploymentPodSelector(&appsv1.Deployment{}) != "" {
+		t.Error("GetDeploymentPodSelector on empty deployment should return empty string")
+	}
+}
+
 func TestListDeployments(t *testing.T) {
 	clientset := fake.NewSimpleClientset(
 		&appsv1.Deployment{

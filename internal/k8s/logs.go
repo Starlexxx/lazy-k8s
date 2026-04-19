@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"strings"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -111,4 +113,68 @@ func (c *Client) GetPodLogSnapshot(
 	}
 
 	return string(raw), nil
+}
+
+// GetPodsLogSnapshot fetches a log snapshot from every named pod concurrently
+// and returns a single blob where each line is prefixed with "[podName] ".
+// Pods that fail to return logs surface as error lines rather than aborting
+// the whole call — one broken pod shouldn't hide logs from the rest.
+func (c *Client) GetPodsLogSnapshot(
+	ctx context.Context,
+	namespace string,
+	podNames []string,
+	opts LogOptions,
+) (string, error) {
+	if namespace == "" {
+		namespace = c.namespace
+	}
+
+	if len(podNames) == 0 {
+		return "", nil
+	}
+
+	type podResult struct {
+		name    string
+		content string
+		err     error
+	}
+
+	results := make([]podResult, len(podNames))
+
+	var wg sync.WaitGroup
+
+	for i, name := range podNames {
+		wg.Add(1)
+
+		go func(idx int, podName string) {
+			defer wg.Done()
+
+			content, err := c.GetPodLogSnapshot(ctx, namespace, podName, opts)
+			results[idx] = podResult{name: podName, content: content, err: err}
+		}(i, name)
+	}
+
+	wg.Wait()
+
+	var b strings.Builder
+
+	for _, r := range results {
+		if r.err != nil {
+			b.WriteString("[" + r.name + "] <error: " + r.err.Error() + ">\n")
+
+			continue
+		}
+
+		for line := range strings.SplitSeq(r.content, "\n") {
+			if line == "" {
+				continue
+			}
+
+			b.WriteString("[" + r.name + "] ")
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String(), nil
 }
