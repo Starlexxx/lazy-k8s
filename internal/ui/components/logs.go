@@ -230,10 +230,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 				l.follow = false
 			}
 		case "down", "j":
-			maxOffset := len(l.lines) - l.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(l.lines)-l.height+6, 0)
 
 			if l.offset < maxOffset {
 				l.offset++
@@ -246,20 +243,14 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			l.offset = 0
 			l.follow = false
 		case "G":
-			maxOffset := len(l.lines) - l.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(l.lines)-l.height+6, 0)
 
 			l.offset = maxOffset
 			l.follow = true
 		case "f":
 			l.follow = !l.follow
 			if l.follow {
-				maxOffset := len(l.lines) - l.height + 6
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
+				maxOffset := max(len(l.lines)-l.height+6, 0)
 
 				l.offset = maxOffset
 			}
@@ -271,10 +262,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 
 			l.follow = false
 		case "pgdown", "ctrl+d":
-			maxOffset := len(l.lines) - l.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(l.lines)-l.height+6, 0)
 
 			l.offset += l.height / 2
 			if l.offset > maxOffset {
@@ -298,10 +286,7 @@ func (l *LogViewer) Update(msg tea.Msg) (*LogViewer, tea.Cmd) {
 			}
 
 			if l.follow {
-				maxOffset := len(l.lines) - l.height + 6
-				if maxOffset < 0 {
-					maxOffset = 0
-				}
+				maxOffset := max(len(l.lines)-l.height+6, 0)
 
 				l.offset = maxOffset
 			}
@@ -400,15 +385,9 @@ func (l *LogViewer) View(width, height int) string {
 		visibleHeight = 1
 	}
 
-	endIdx := l.offset + visibleHeight
-	if endIdx > len(l.lines) {
-		endIdx = len(l.lines)
-	}
+	endIdx := min(l.offset+visibleHeight, len(l.lines))
 
-	startIdx := l.offset
-	if startIdx < 0 {
-		startIdx = 0
-	}
+	startIdx := max(l.offset, 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		line := l.lines[i]
@@ -441,10 +420,7 @@ func (l *LogViewer) View(width, height int) string {
 	}
 
 	if width > 40 {
-		separatorWidth := width - 30
-		if separatorWidth < 0 {
-			separatorWidth = 0
-		}
+		separatorWidth := max(width-30, 0)
 
 		lineInfo := l.styles.Muted.Render(
 			lipgloss.NewStyle().Align(lipgloss.Right).Width(width - 8).

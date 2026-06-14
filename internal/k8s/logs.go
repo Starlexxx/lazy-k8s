@@ -29,9 +29,7 @@ func (c *Client) StreamPodLogs(
 	namespace, podName string,
 	opts LogOptions,
 ) (<-chan LogLine, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	podLogOpts := &corev1.PodLogOptions{
 		Container:  opts.Container,
@@ -55,32 +53,48 @@ func (c *Client) StreamPodLogs(
 
 	logChan := make(chan LogLine, 100)
 
-	go func() {
-		defer close(logChan)
-		defer func() { _ = stream.Close() }()
-
-		reader := bufio.NewReader(stream)
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				line, err := reader.ReadString('\n')
-				if err != nil {
-					if err != io.EOF {
-						logChan <- LogLine{Error: err}
-					}
-
-					return
-				}
-
-				logChan <- LogLine{Content: line}
-			}
-		}
-	}()
+	go pumpLogLines(ctx, stream, logChan)
 
 	return logChan, nil
+}
+
+// pumpLogLines reads lines from stream into logChan until the stream ends or
+// ctx is canceled. Sends select on ctx.Done() so the goroutine can't block
+// forever on a full channel once the consumer is gone.
+func pumpLogLines(ctx context.Context, stream io.ReadCloser, logChan chan<- LogLine) {
+	defer close(logChan)
+	defer func() { _ = stream.Close() }()
+
+	reader := bufio.NewReader(stream)
+
+	send := func(l LogLine) bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case logChan <- l:
+			return true
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					send(LogLine{Error: err})
+				}
+
+				return
+			}
+
+			if !send(LogLine{Content: line}) {
+				return
+			}
+		}
+	}
 }
 
 func (c *Client) GetPodLogSnapshot(
@@ -88,9 +102,7 @@ func (c *Client) GetPodLogSnapshot(
 	namespace, podName string,
 	opts LogOptions,
 ) (string, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	podLogOpts := &corev1.PodLogOptions{
 		Container:  opts.Container,
@@ -125,9 +137,7 @@ func (c *Client) GetPodsLogSnapshot(
 	podNames []string,
 	opts LogOptions,
 ) (string, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	if len(podNames) == 0 {
 		return "", nil

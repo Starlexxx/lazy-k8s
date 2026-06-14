@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewServiceAccountsPanel(client *k8s.Client, styles *theme.Styles) *ServiceA
 	return &ServiceAccountsPanel{
 		BasePanel: BasePanel{
 			title:       "ServiceAccounts",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -70,7 +69,7 @@ func (p *ServiceAccountsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *ServiceAccountsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -79,20 +78,7 @@ func (p *ServiceAccountsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		sa := p.filtered[i]
@@ -128,10 +114,7 @@ func (p *ServiceAccountsPanel) renderServiceAccountLine(
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(sa.Name, nameW), nameW,
@@ -269,35 +252,23 @@ func (p *ServiceAccountsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *ServiceAccountsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *ServiceAccountsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *ServiceAccountsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(sa corev1.ServiceAccount) string {
+		return sa.Name
+	})
 }
 
 func (p *ServiceAccountsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	sa := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(sa)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *ServiceAccountsPanel) GetSelectedDescribe() (string, error) {
@@ -354,25 +325,12 @@ func (p *ServiceAccountsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *ServiceAccountsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.serviceAccounts
-
-		return
-	}
-
-	p.filtered = make([]corev1.ServiceAccount, 0)
-	for _, sa := range p.serviceAccounts {
-		if strings.Contains(strings.ToLower(sa.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, sa)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.serviceAccounts,
+		p.filter,
+		func(sa corev1.ServiceAccount) string { return sa.Name },
+		&p.cursor,
+	)
 }
 
 func (p *ServiceAccountsPanel) SetFilter(query string) {
@@ -381,41 +339,27 @@ func (p *ServiceAccountsPanel) SetFilter(query string) {
 }
 
 func (p *ServiceAccountsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, sa := range p.serviceAccounts {
-		if strings.Contains(strings.ToLower(sa.Name), q) {
-			results = append(results, SearchResult{
-				Name:      sa.Name,
-				Namespace: sa.Namespace,
-				Kind:      p.title,
-				Status: fmt.Sprintf(
-					"%d secrets",
-					k8s.GetServiceAccountSecretCount(&sa),
-				),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.serviceAccounts,
+		query,
+		p.title,
+		func(sa corev1.ServiceAccount) string { return sa.Name },
+		func(sa corev1.ServiceAccount) string { return sa.Namespace },
+		func(sa corev1.ServiceAccount) string {
+			return fmt.Sprintf("%d secrets", k8s.GetServiceAccountSecretCount(&sa))
+		},
+	)
 }
 
 func (p *ServiceAccountsPanel) NavigateTo(name, namespace string) bool {
-	for i, sa := range p.filtered {
-		if sa.Name == name && sa.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(sa corev1.ServiceAccount) string { return sa.Name },
+		func(sa corev1.ServiceAccount) string { return sa.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type serviceAccountsLoadedMsg struct {

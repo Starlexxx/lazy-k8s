@@ -112,11 +112,7 @@ func (g *GlobalSearch) Update(
 	case "ctrl+d":
 		g.cursor += 10
 		if g.cursor >= resultCount {
-			g.cursor = resultCount - 1
-
-			if g.cursor < 0 {
-				g.cursor = 0
-			}
+			g.cursor = max(resultCount-1, 0)
 		}
 
 		return g, nil, false

@@ -8,13 +8,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-type NamespaceInfo struct {
-	Name   string
-	Status string
-	Age    string
-	Labels map[string]string
-}
-
 func (c *Client) ListNamespaces(ctx context.Context) ([]corev1.Namespace, error) {
 	list, err := c.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 	if err != nil {

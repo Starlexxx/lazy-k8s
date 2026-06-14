@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -70,7 +69,7 @@ func (p *ConfigMapsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *ConfigMapsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -79,20 +78,7 @@ func (p *ConfigMapsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		cm := p.filtered[i]
@@ -125,10 +111,7 @@ func (p *ConfigMapsPanel) renderConfigMapLine(cm corev1.ConfigMap, selected bool
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(cm.Name, nameW), nameW,
@@ -251,35 +234,21 @@ func (p *ConfigMapsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *ConfigMapsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *ConfigMapsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *ConfigMapsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(cm corev1.ConfigMap) string { return cm.Name })
 }
 
 func (p *ConfigMapsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	cm := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(cm)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
@@ -314,25 +283,9 @@ func (p *ConfigMapsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *ConfigMapsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.configmaps
-
-		return
-	}
-
-	p.filtered = make([]corev1.ConfigMap, 0)
-	for _, cm := range p.configmaps {
-		if strings.Contains(strings.ToLower(cm.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, cm)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.configmaps, p.filter, func(cm corev1.ConfigMap) string { return cm.Name }, &p.cursor,
+	)
 }
 
 func (p *ConfigMapsPanel) SetFilter(query string) {
@@ -341,38 +294,25 @@ func (p *ConfigMapsPanel) SetFilter(query string) {
 }
 
 func (p *ConfigMapsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, cm := range p.configmaps {
-		if strings.Contains(strings.ToLower(cm.Name), q) {
-			results = append(results, SearchResult{
-				Name:      cm.Name,
-				Namespace: cm.Namespace,
-				Kind:      p.title,
-				Status:    fmt.Sprintf("%d keys", len(cm.Data)),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.configmaps,
+		query,
+		p.title,
+		func(cm corev1.ConfigMap) string { return cm.Name },
+		func(cm corev1.ConfigMap) string { return cm.Namespace },
+		func(cm corev1.ConfigMap) string { return fmt.Sprintf("%d keys", len(cm.Data)) },
+	)
 }
 
 func (p *ConfigMapsPanel) NavigateTo(name, namespace string) bool {
-	for i, cm := range p.filtered {
-		if cm.Name == name && cm.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(cm corev1.ConfigMap) string { return cm.Name },
+		func(cm corev1.ConfigMap) string { return cm.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type configmapsLoadedMsg struct {

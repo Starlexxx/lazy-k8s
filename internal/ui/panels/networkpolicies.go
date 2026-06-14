@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	networkingv1 "k8s.io/api/networking/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewNetworkPoliciesPanel(client *k8s.Client, styles *theme.Styles) *NetworkP
 	return &NetworkPoliciesPanel{
 		BasePanel: BasePanel{
 			title:       "NetworkPolicies",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -70,7 +69,7 @@ func (p *NetworkPoliciesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *NetworkPoliciesPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -79,20 +78,7 @@ func (p *NetworkPoliciesPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		np := p.filtered[i]
@@ -128,10 +114,7 @@ func (p *NetworkPoliciesPanel) renderNetworkPolicyLine(
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(np.Name, nameW), nameW,
@@ -307,35 +290,23 @@ func (p *NetworkPoliciesPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *NetworkPoliciesPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *NetworkPoliciesPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *NetworkPoliciesPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(np networkingv1.NetworkPolicy) string {
+		return np.Name
+	})
 }
 
 func (p *NetworkPoliciesPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	np := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(np)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *NetworkPoliciesPanel) GetSelectedDescribe() (string, error) {
@@ -389,25 +360,12 @@ func (p *NetworkPoliciesPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *NetworkPoliciesPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.networkPolicies
-
-		return
-	}
-
-	p.filtered = make([]networkingv1.NetworkPolicy, 0)
-	for _, np := range p.networkPolicies {
-		if strings.Contains(strings.ToLower(np.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, np)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.networkPolicies,
+		p.filter,
+		func(n networkingv1.NetworkPolicy) string { return n.Name },
+		&p.cursor,
+	)
 }
 
 func (p *NetworkPoliciesPanel) SetFilter(query string) {
@@ -416,42 +374,31 @@ func (p *NetworkPoliciesPanel) SetFilter(query string) {
 }
 
 func (p *NetworkPoliciesPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, np := range p.networkPolicies {
-		if strings.Contains(strings.ToLower(np.Name), q) {
-			results = append(results, SearchResult{
-				Name:      np.Name,
-				Namespace: np.Namespace,
-				Kind:      p.title,
-				Status: fmt.Sprintf(
-					"%dI/%dE",
-					k8s.GetNetworkPolicyIngressRuleCount(&np),
-					k8s.GetNetworkPolicyEgressRuleCount(&np),
-				),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.networkPolicies,
+		query,
+		p.title,
+		func(np networkingv1.NetworkPolicy) string { return np.Name },
+		func(np networkingv1.NetworkPolicy) string { return np.Namespace },
+		func(np networkingv1.NetworkPolicy) string {
+			return fmt.Sprintf(
+				"%dI/%dE",
+				k8s.GetNetworkPolicyIngressRuleCount(&np),
+				k8s.GetNetworkPolicyEgressRuleCount(&np),
+			)
+		},
+	)
 }
 
 func (p *NetworkPoliciesPanel) NavigateTo(name, namespace string) bool {
-	for i, np := range p.filtered {
-		if np.Name == name && np.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(np networkingv1.NetworkPolicy) string { return np.Name },
+		func(np networkingv1.NetworkPolicy) string { return np.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type networkPoliciesLoadedMsg struct {

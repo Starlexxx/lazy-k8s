@@ -9,9 +9,7 @@ import (
 )
 
 func (c *Client) ListSecrets(ctx context.Context, namespace string) ([]corev1.Secret, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -31,25 +29,19 @@ func (c *Client) ListSecretsAllNamespaces(ctx context.Context) ([]corev1.Secret,
 }
 
 func (c *Client) GetSecret(ctx context.Context, namespace, name string) (*corev1.Secret, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (c *Client) WatchSecrets(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Secrets(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteSecret(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }

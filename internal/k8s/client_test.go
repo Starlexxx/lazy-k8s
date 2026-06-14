@@ -100,24 +100,3 @@ func TestClientGetContextsEmpty(t *testing.T) {
 		t.Errorf("GetContexts() returned %d contexts, want 0", len(contexts))
 	}
 }
-
-func TestClientContext(t *testing.T) {
-	client := &Client{}
-
-	ctx := client.Context()
-	if ctx == nil {
-		t.Error("Context() returned nil")
-	}
-}
-
-func TestClientRestConfig(t *testing.T) {
-	client := &Client{
-		restConfig: nil, // Can be nil in this test
-	}
-
-	// Should not panic
-	result := client.RestConfig()
-	if result != nil {
-		t.Error("RestConfig() should be nil when not set")
-	}
-}

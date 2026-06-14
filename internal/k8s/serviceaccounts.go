@@ -13,9 +13,7 @@ func (c *Client) ListServiceAccounts(
 	ctx context.Context,
 	namespace string,
 ) ([]corev1.ServiceAccount, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -40,9 +38,7 @@ func (c *Client) GetServiceAccount(
 	ctx context.Context,
 	namespace, name string,
 ) (*corev1.ServiceAccount, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().ServiceAccounts(namespace).Get(ctx, name, metav1.GetOptions{})
 }
@@ -51,17 +47,13 @@ func (c *Client) WatchServiceAccounts(
 	ctx context.Context,
 	namespace string,
 ) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().ServiceAccounts(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteServiceAccount(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().ServiceAccounts(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }

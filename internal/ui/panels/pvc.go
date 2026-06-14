@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -71,7 +70,7 @@ func (p *PVCPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *PVCPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -80,20 +79,7 @@ func (p *PVCPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		pvc := p.filtered[i]
@@ -126,10 +112,7 @@ func (p *PVCPanel) renderPVCLine(pvc corev1.PersistentVolumeClaim, selected bool
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(pvc.Name, nameW), nameW,
@@ -307,35 +290,25 @@ func (p *PVCPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *PVCPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *PVCPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *PVCPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(
+		p.filtered,
+		p.cursor,
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Name },
+	)
 }
 
 func (p *PVCPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	pvc := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(pvc)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *PVCPanel) GetSelectedDescribe() (string, error) {
@@ -380,25 +353,12 @@ func (p *PVCPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *PVCPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.pvcs
-
-		return
-	}
-
-	p.filtered = make([]corev1.PersistentVolumeClaim, 0)
-	for _, pvc := range p.pvcs {
-		if strings.Contains(strings.ToLower(pvc.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, pvc)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.pvcs,
+		p.filter,
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Name },
+		&p.cursor,
+	)
 }
 
 func (p *PVCPanel) SetFilter(query string) {
@@ -407,38 +367,25 @@ func (p *PVCPanel) SetFilter(query string) {
 }
 
 func (p *PVCPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, pvc := range p.pvcs {
-		if strings.Contains(strings.ToLower(pvc.Name), q) {
-			results = append(results, SearchResult{
-				Name:      pvc.Name,
-				Namespace: pvc.Namespace,
-				Kind:      p.title,
-				Status:    string(pvc.Status.Phase),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.pvcs,
+		query,
+		p.title,
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Name },
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Namespace },
+		func(pvc corev1.PersistentVolumeClaim) string { return string(pvc.Status.Phase) },
+	)
 }
 
 func (p *PVCPanel) NavigateTo(name, namespace string) bool {
-	for i, pvc := range p.filtered {
-		if pvc.Name == name && pvc.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Name },
+		func(pvc corev1.PersistentVolumeClaim) string { return pvc.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type pvcLoadedMsg struct {

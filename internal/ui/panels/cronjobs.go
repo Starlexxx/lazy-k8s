@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	batchv1 "k8s.io/api/batch/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewCronJobsPanel(client *k8s.Client, styles *theme.Styles) *CronJobsPanel {
 	return &CronJobsPanel{
 		BasePanel: BasePanel{
 			title:       "CronJobs",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -102,7 +101,7 @@ func (p *CronJobsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *CronJobsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -111,20 +110,7 @@ func (p *CronJobsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		cj := p.filtered[i]
@@ -162,10 +148,7 @@ func (p *CronJobsPanel) renderCronJobLine(cj batchv1.CronJob, selected bool) str
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(cj.Name, nameW), nameW,
@@ -346,35 +329,21 @@ func (p *CronJobsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *CronJobsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *CronJobsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *CronJobsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(cj batchv1.CronJob) string { return cj.Name })
 }
 
 func (p *CronJobsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	cj := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(cj)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *CronJobsPanel) GetSelectedDescribe() (string, error) {
@@ -424,25 +393,9 @@ func (p *CronJobsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *CronJobsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.cronjobs
-
-		return
-	}
-
-	p.filtered = make([]batchv1.CronJob, 0)
-	for _, cj := range p.cronjobs {
-		if strings.Contains(strings.ToLower(cj.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, cj)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.cronjobs, p.filter, func(c batchv1.CronJob) string { return c.Name }, &p.cursor,
+	)
 }
 
 func (p *CronJobsPanel) SetFilter(query string) {
@@ -451,38 +404,25 @@ func (p *CronJobsPanel) SetFilter(query string) {
 }
 
 func (p *CronJobsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, cj := range p.cronjobs {
-		if strings.Contains(strings.ToLower(cj.Name), q) {
-			results = append(results, SearchResult{
-				Name:      cj.Name,
-				Namespace: cj.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetCronJobStatus(&cj),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.cronjobs,
+		query,
+		p.title,
+		func(cj batchv1.CronJob) string { return cj.Name },
+		func(cj batchv1.CronJob) string { return cj.Namespace },
+		func(cj batchv1.CronJob) string { return k8s.GetCronJobStatus(&cj) },
+	)
 }
 
 func (p *CronJobsPanel) NavigateTo(name, namespace string) bool {
-	for i, cj := range p.filtered {
-		if cj.Name == name && cj.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(cj batchv1.CronJob) string { return cj.Name },
+		func(cj batchv1.CronJob) string { return cj.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type cronJobsLoadedMsg struct {

@@ -10,20 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-type ServiceInfo struct {
-	Name       string
-	Namespace  string
-	Type       string
-	ClusterIP  string
-	ExternalIP string
-	Ports      string
-	Age        string
-}
-
 func (c *Client) ListServices(ctx context.Context, namespace string) ([]corev1.Service, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -43,25 +31,19 @@ func (c *Client) ListServicesAllNamespaces(ctx context.Context) ([]corev1.Servic
 }
 
 func (c *Client) GetService(ctx context.Context, namespace, name string) (*corev1.Service, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (c *Client) WatchServices(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Services(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteService(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }

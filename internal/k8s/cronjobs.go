@@ -8,15 +8,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/utils/ptr"
 )
 
 func (c *Client) ListCronJobs(
 	ctx context.Context,
 	namespace string,
 ) ([]batchv1.CronJob, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -39,33 +38,25 @@ func (c *Client) GetCronJob(
 	ctx context.Context,
 	namespace, name string,
 ) (*batchv1.CronJob, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (c *Client) WatchCronJobs(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.BatchV1().CronJobs(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteCronJob(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.BatchV1().CronJobs(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*batchv1.Job, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	cronJob, err := c.GetCronJob(ctx, namespace, name)
 	if err != nil {
@@ -84,10 +75,12 @@ func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*b
 			// and lets the CronJob controller count this in its active jobs list.
 			OwnerReferences: []metav1.OwnerReference{
 				{
-					APIVersion: "batch/v1",
-					Kind:       "CronJob",
-					Name:       cronJob.Name,
-					UID:        cronJob.UID,
+					APIVersion:         "batch/v1",
+					Kind:               "CronJob",
+					Name:               cronJob.Name,
+					UID:                cronJob.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
 				},
 			},
 		},
@@ -98,9 +91,7 @@ func (c *Client) TriggerCronJob(ctx context.Context, namespace, name string) (*b
 }
 
 func (c *Client) SuspendCronJob(ctx context.Context, namespace, name string, suspend bool) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	patch := fmt.Appendf(nil, `{"spec":{"suspend":%t}}`, suspend)
 

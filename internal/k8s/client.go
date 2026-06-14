@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"context"
 	"fmt"
 
 	"k8s.io/client-go/kubernetes"
@@ -70,6 +69,15 @@ func NewClient(kubeconfig, contextName string) (*Client, error) {
 	}, nil
 }
 
+// ns falls back to the client's default namespace when none is given.
+func (c *Client) ns(namespace string) string {
+	if namespace == "" {
+		return c.namespace
+	}
+
+	return namespace
+}
+
 func (c *Client) SetNamespace(ns string) {
 	c.namespace = ns
 }
@@ -84,10 +92,6 @@ func (c *Client) CurrentContext() string {
 
 func (c *Client) Clientset() kubernetes.Interface {
 	return c.clientset
-}
-
-func (c *Client) RestConfig() *rest.Config {
-	return c.restConfig
 }
 
 func (c *Client) GetContexts() []string {
@@ -132,10 +136,6 @@ func (c *Client) SwitchContext(contextName string) error {
 	c.namespace = namespace
 
 	return nil
-}
-
-func (c *Client) Context() context.Context {
-	return context.Background()
 }
 
 // NewTestClient creates a Client with a fake clientset for use in tests

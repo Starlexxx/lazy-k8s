@@ -8,20 +8,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 )
 
-type EventInfo struct {
-	LastSeen  string
-	Type      string
-	Reason    string
-	Object    string
-	Message   string
-	Count     int32
-	Namespace string
-}
-
 func (c *Client) ListEvents(ctx context.Context, namespace string) ([]corev1.Event, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -44,9 +32,7 @@ func (c *Client) ListEventsForResource(
 	ctx context.Context,
 	namespace, kind, name string,
 ) ([]corev1.Event, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	fieldSelector := "involvedObject.name=" + name + ",involvedObject.kind=" + kind
 
@@ -61,9 +47,7 @@ func (c *Client) ListEventsForResource(
 }
 
 func (c *Client) WatchEvents(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.CoreV1().Events(namespace).Watch(ctx, metav1.ListOptions{})
 }

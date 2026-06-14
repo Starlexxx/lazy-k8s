@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -71,7 +70,7 @@ func (p *PVPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *PVPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -80,20 +79,7 @@ func (p *PVPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		pv := p.filtered[i]
@@ -121,10 +107,7 @@ func (p *PVPanel) renderPVLine(pv corev1.PersistentVolume, selected bool) string
 	}
 
 	if p.width > 80 {
-		nameW := p.width - 40
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-40, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(pv.Name, nameW), nameW,
@@ -280,35 +263,23 @@ func (p *PVPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *PVPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *PVPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *PVPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(pv corev1.PersistentVolume) string {
+		return pv.Name
+	})
 }
 
 func (p *PVPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	pv := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(pv)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *PVPanel) GetSelectedDescribe() (string, error) {
@@ -356,25 +327,12 @@ func (p *PVPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *PVPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.pvs
-
-		return
-	}
-
-	p.filtered = make([]corev1.PersistentVolume, 0)
-	for _, pv := range p.pvs {
-		if strings.Contains(strings.ToLower(pv.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, pv)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.pvs,
+		p.filter,
+		func(pv corev1.PersistentVolume) string { return pv.Name },
+		&p.cursor,
+	)
 }
 
 func (p *PVPanel) SetFilter(query string) {
@@ -383,37 +341,25 @@ func (p *PVPanel) SetFilter(query string) {
 }
 
 func (p *PVPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, pv := range p.pvs {
-		if strings.Contains(strings.ToLower(pv.Name), q) {
-			results = append(results, SearchResult{
-				Name:   pv.Name,
-				Kind:   p.title,
-				Status: string(pv.Status.Phase),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.pvs,
+		query,
+		p.title,
+		func(pv corev1.PersistentVolume) string { return pv.Name },
+		nil,
+		func(pv corev1.PersistentVolume) string { return string(pv.Status.Phase) },
+	)
 }
 
 func (p *PVPanel) NavigateTo(name, _ string) bool {
-	for i, pv := range p.filtered {
-		if pv.Name == name {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(pv corev1.PersistentVolume) string { return pv.Name },
+		nil,
+		name,
+		"",
+	)
 }
 
 type pvLoadedMsg struct {

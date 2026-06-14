@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewDaemonSetsPanel(client *k8s.Client, styles *theme.Styles) *DaemonSetsPan
 	return &DaemonSetsPanel{
 		BasePanel: BasePanel{
 			title:       "DaemonSets",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -83,7 +82,7 @@ func (p *DaemonSetsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *DaemonSetsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -92,20 +91,7 @@ func (p *DaemonSetsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		ds := p.filtered[i]
@@ -143,10 +129,7 @@ func (p *DaemonSetsPanel) renderDaemonSetLine(ds appsv1.DaemonSet, selected bool
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(ds.Name, nameW), nameW,
@@ -289,35 +272,21 @@ func (p *DaemonSetsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *DaemonSetsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *DaemonSetsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *DaemonSetsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(ds appsv1.DaemonSet) string { return ds.Name })
 }
 
 func (p *DaemonSetsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	ds := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(ds)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *DaemonSetsPanel) GetSelectedDescribe() (string, error) {
@@ -390,25 +359,9 @@ func (p *DaemonSetsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *DaemonSetsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.daemonsets
-
-		return
-	}
-
-	p.filtered = make([]appsv1.DaemonSet, 0)
-	for _, ds := range p.daemonsets {
-		if strings.Contains(strings.ToLower(ds.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, ds)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.daemonsets, p.filter, func(d appsv1.DaemonSet) string { return d.Name }, &p.cursor,
+	)
 }
 
 func (p *DaemonSetsPanel) SetFilter(query string) {
@@ -417,38 +370,25 @@ func (p *DaemonSetsPanel) SetFilter(query string) {
 }
 
 func (p *DaemonSetsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, ds := range p.daemonsets {
-		if strings.Contains(strings.ToLower(ds.Name), q) {
-			results = append(results, SearchResult{
-				Name:      ds.Name,
-				Namespace: ds.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetDaemonSetReadyCount(&ds),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.daemonsets,
+		query,
+		p.title,
+		func(ds appsv1.DaemonSet) string { return ds.Name },
+		func(ds appsv1.DaemonSet) string { return ds.Namespace },
+		func(ds appsv1.DaemonSet) string { return k8s.GetDaemonSetReadyCount(&ds) },
+	)
 }
 
 func (p *DaemonSetsPanel) NavigateTo(name, namespace string) bool {
-	for i, ds := range p.filtered {
-		if ds.Name == name && ds.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(ds appsv1.DaemonSet) string { return ds.Name },
+		func(ds appsv1.DaemonSet) string { return ds.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type daemonSetsLoadedMsg struct {

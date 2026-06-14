@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -71,7 +70,7 @@ func (p *JobsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *JobsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -80,20 +79,7 @@ func (p *JobsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		job := p.filtered[i]
@@ -126,10 +112,7 @@ func (p *JobsPanel) renderJobLine(job batchv1.Job, selected bool) string {
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(job.Name, nameW), nameW,
@@ -298,35 +281,21 @@ func (p *JobsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *JobsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *JobsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *JobsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(j batchv1.Job) string { return j.Name })
 }
 
 func (p *JobsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	job := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(job)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *JobsPanel) GetSelectedDescribe() (string, error) {
@@ -362,25 +331,9 @@ func (p *JobsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *JobsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.jobs
-
-		return
-	}
-
-	p.filtered = make([]batchv1.Job, 0)
-	for _, job := range p.jobs {
-		if strings.Contains(strings.ToLower(job.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, job)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.jobs, p.filter, func(j batchv1.Job) string { return j.Name }, &p.cursor,
+	)
 }
 
 func (p *JobsPanel) SetFilter(query string) {
@@ -389,38 +342,25 @@ func (p *JobsPanel) SetFilter(query string) {
 }
 
 func (p *JobsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, job := range p.jobs {
-		if strings.Contains(strings.ToLower(job.Name), q) {
-			results = append(results, SearchResult{
-				Name:      job.Name,
-				Namespace: job.Namespace,
-				Kind:      p.title,
-				Status:    p.getJobStatus(&job),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.jobs,
+		query,
+		p.title,
+		func(j batchv1.Job) string { return j.Name },
+		func(j batchv1.Job) string { return j.Namespace },
+		func(j batchv1.Job) string { return p.getJobStatus(&j) },
+	)
 }
 
 func (p *JobsPanel) NavigateTo(name, namespace string) bool {
-	for i, job := range p.filtered {
-		if job.Name == name && job.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(j batchv1.Job) string { return j.Name },
+		func(j batchv1.Job) string { return j.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type jobsLoadedMsg struct {

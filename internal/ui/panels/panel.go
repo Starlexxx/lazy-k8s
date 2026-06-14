@@ -2,8 +2,10 @@ package panels
 
 import (
 	"errors"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	sigs_yaml "sigs.k8s.io/yaml"
 )
 
 var ErrNoSelection = errors.New("no item selected")
@@ -146,7 +148,7 @@ type Panel interface {
 	SetSize(width, height int)
 	SetFocused(focused bool)
 	IsFocused() bool
-	SelectedItem() interface{}
+	SelectedItem() any
 	SelectedName() string
 	Refresh() tea.Cmd
 	Delete() tea.Cmd
@@ -217,10 +219,7 @@ func (b *BasePanel) MoveToTop() {
 }
 
 func (b *BasePanel) MoveToBottom(maxItems int) {
-	b.cursor = maxItems - 1
-	if b.cursor < 0 {
-		b.cursor = 0
-	}
+	b.cursor = max(maxItems-1, 0)
 }
 
 func (b *BasePanel) Cursor() int {
@@ -245,4 +244,148 @@ func (b *BasePanel) Filter() string {
 
 func (b *BasePanel) AllNamespaces() bool {
 	return b.allNs
+}
+
+// filterByName returns items whose name contains filter (case-insensitive).
+// If filter is empty the original slice is returned unchanged.
+// The cursor is clamped to the new length so it never goes out of bounds.
+func filterByName[T any](items []T, filter string, name func(T) string, cursor *int) []T {
+	if filter == "" {
+		return items
+	}
+
+	q := strings.ToLower(filter)
+	out := make([]T, 0, len(items))
+
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(name(item)), q) {
+			out = append(out, item)
+		}
+	}
+
+	if *cursor >= len(out) {
+		*cursor = max(len(out)-1, 0)
+	}
+
+	return out
+}
+
+// visibleWindow computes the start/end indices of the visible slice window.
+// extraHeaderRows should be 1 when a header row is rendered above the list
+// (pods, nodes), 0 otherwise.
+func (b *BasePanel) visibleWindow(total, extraHeaderRows int) (start, end int) {
+	visible := max(b.height-3-extraHeaderRows, 1)
+
+	start = 0
+	if b.cursor >= visible {
+		start = b.cursor - visible + 1
+	}
+
+	end = min(start+visible, total)
+
+	return start, end
+}
+
+// renderTitle returns the panel title string, optionally with a [key] suffix.
+// When shortcutKey is empty the bracket is omitted.
+func (b *BasePanel) renderTitle() string {
+	if b.shortcutKey == "" {
+		return b.title
+	}
+
+	return b.title + " [" + b.shortcutKey + "]"
+}
+
+// marshalSelectedYAML marshals the item at cursor to YAML.
+func marshalSelectedYAML[T any](items []T, cursor int) (string, error) {
+	if cursor >= len(items) {
+		return "", ErrNoSelection
+	}
+
+	data, err := sigs_yaml.Marshal(items[cursor])
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+// selectedItem returns a pointer to the item at cursor, or nil.
+func selectedItem[T any](items []T, cursor int) *T {
+	if cursor >= len(items) {
+		return nil
+	}
+
+	return &items[cursor]
+}
+
+// selectedName returns the name of the item at cursor via the name accessor.
+func selectedName[T any](items []T, cursor int, name func(T) string) string {
+	if cursor >= len(items) {
+		return ""
+	}
+
+	return name(items[cursor])
+}
+
+// searchByName returns SearchResults for all items whose name contains query.
+// status is a per-item callback to compute the Status field.
+// namespace is a per-item callback; pass nil for cluster-scoped resources.
+func searchByName[T any](
+	items []T,
+	query, kind string,
+	name func(T) string,
+	namespace func(T) string,
+	status func(T) string,
+) []SearchResult {
+	if query == "" {
+		return nil
+	}
+
+	q := strings.ToLower(query)
+
+	var results []SearchResult
+
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(name(item)), q) {
+			ns := ""
+			if namespace != nil {
+				ns = namespace(item)
+			}
+
+			results = append(results, SearchResult{
+				Name:      name(item),
+				Namespace: ns,
+				Kind:      kind,
+				Status:    status(item),
+			})
+		}
+	}
+
+	return results
+}
+
+// navigateTo moves cursor to the first item matching name+namespace.
+// For cluster-scoped resources pass nil for namespace and "" for targetNamespace.
+func navigateTo[T any](
+	items []T,
+	cursor *int,
+	name func(T) string,
+	namespace func(T) string,
+	targetName, targetNamespace string,
+) bool {
+	for i, item := range items {
+		ns := ""
+		if namespace != nil {
+			ns = namespace(item)
+		}
+
+		if name(item) == targetName && ns == targetNamespace {
+			*cursor = i
+
+			return true
+		}
+	}
+
+	return false
 }

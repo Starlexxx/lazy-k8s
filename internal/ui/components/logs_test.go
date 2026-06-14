@@ -440,7 +440,7 @@ func TestLogViewerMaxLines(t *testing.T) {
 	viewer.follow = true
 	viewer.height = 20
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		msg := LogLineMsg{Line: "line"}
 		viewer, _ = viewer.Update(msg)
 	}

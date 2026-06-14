@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -128,7 +127,7 @@ func (p *DeploymentsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *DeploymentsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -137,20 +136,7 @@ func (p *DeploymentsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		deploy := p.filtered[i]
@@ -171,7 +157,7 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 	ready := k8s.GetDeploymentReadyCount(&deploy)
 
 	readyStyle := p.styles.StatusRunning
-	if deploy.Status.ReadyReplicas < *deploy.Spec.Replicas {
+	if deploy.Status.ReadyReplicas < k8s.GetDeploymentDesiredReplicas(&deploy) {
 		readyStyle = p.styles.StatusPending
 	}
 
@@ -188,10 +174,7 @@ func (p *DeploymentsPanel) renderDeploymentLine(deploy appsv1.Deployment, select
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(deploy.Name, nameW), nameW,
@@ -342,35 +325,23 @@ func (p *DeploymentsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *DeploymentsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *DeploymentsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *DeploymentsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(
+		p.filtered, p.cursor, func(d appsv1.Deployment) string { return d.Name },
+	)
 }
 
 func (p *DeploymentsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	deploy := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(deploy)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
@@ -392,7 +363,7 @@ func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
 	b.WriteString(
 		fmt.Sprintf(
 			"Replicas:           %d desired | %d updated | %d total | %d available | %d unavailable\n",
-			*deploy.Spec.Replicas,
+			k8s.GetDeploymentDesiredReplicas(&deploy),
 			deploy.Status.UpdatedReplicas,
 			deploy.Status.Replicas,
 			deploy.Status.AvailableReplicas,
@@ -440,25 +411,9 @@ func (p *DeploymentsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *DeploymentsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.deployments
-
-		return
-	}
-
-	p.filtered = make([]appsv1.Deployment, 0)
-	for _, deploy := range p.deployments {
-		if strings.Contains(strings.ToLower(deploy.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, deploy)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.deployments, p.filter, func(d appsv1.Deployment) string { return d.Name }, &p.cursor,
+	)
 }
 
 func (p *DeploymentsPanel) SetFilter(query string) {
@@ -474,38 +429,25 @@ func (p *DeploymentsPanel) SetTestDeployments(
 }
 
 func (p *DeploymentsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, deploy := range p.deployments {
-		if strings.Contains(strings.ToLower(deploy.Name), q) {
-			results = append(results, SearchResult{
-				Name:      deploy.Name,
-				Namespace: deploy.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetDeploymentReadyCount(&deploy),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.deployments,
+		query,
+		p.title,
+		func(d appsv1.Deployment) string { return d.Name },
+		func(d appsv1.Deployment) string { return d.Namespace },
+		func(d appsv1.Deployment) string { return k8s.GetDeploymentReadyCount(&d) },
+	)
 }
 
 func (p *DeploymentsPanel) NavigateTo(name, namespace string) bool {
-	for i, deploy := range p.filtered {
-		if deploy.Name == name && deploy.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(d appsv1.Deployment) string { return d.Name },
+		func(d appsv1.Deployment) string { return d.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type deploymentsLoadedMsg struct {

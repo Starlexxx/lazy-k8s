@@ -14,9 +14,7 @@ func (c *Client) ListHPAs(
 	ctx context.Context,
 	namespace string,
 ) ([]autoscalingv2.HorizontalPodAutoscaler, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.AutoscalingV2().
 		HorizontalPodAutoscalers(namespace).
@@ -45,9 +43,7 @@ func (c *Client) GetHPA(
 	ctx context.Context,
 	namespace, name string,
 ) (*autoscalingv2.HorizontalPodAutoscaler, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AutoscalingV2().
 		HorizontalPodAutoscalers(namespace).
@@ -55,9 +51,7 @@ func (c *Client) GetHPA(
 }
 
 func (c *Client) WatchHPAs(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AutoscalingV2().
 		HorizontalPodAutoscalers(namespace).
@@ -65,9 +59,7 @@ func (c *Client) WatchHPAs(ctx context.Context, namespace string) (watch.Interfa
 }
 
 func (c *Client) DeleteHPA(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AutoscalingV2().
 		HorizontalPodAutoscalers(namespace).
@@ -79,9 +71,7 @@ func (c *Client) UpdateHPAMinReplicas(
 	namespace, name string,
 	minReplicas int32,
 ) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	patch := fmt.Appendf(nil, `{"spec":{"minReplicas":%d}}`, minReplicas)
 
@@ -97,9 +87,7 @@ func (c *Client) UpdateHPAMaxReplicas(
 	namespace, name string,
 	maxReplicas int32,
 ) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	patch := fmt.Appendf(nil, `{"spec":{"maxReplicas":%d}}`, maxReplicas)
 
@@ -129,12 +117,4 @@ func GetHPATargetRef(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
 		hpa.Spec.ScaleTargetRef.Kind,
 		hpa.Spec.ScaleTargetRef.Name,
 	)
-}
-
-func GetHPAMetricsSummary(hpa *autoscalingv2.HorizontalPodAutoscaler) string {
-	if len(hpa.Spec.Metrics) == 0 {
-		return "No metrics configured"
-	}
-
-	return fmt.Sprintf("%d metric(s)", len(hpa.Spec.Metrics))
 }
