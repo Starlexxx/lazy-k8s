@@ -2,10 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
-
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -15,23 +11,6 @@ const (
 	TB = GB * 1024
 	PB = TB * 1024
 )
-
-func FormatBytes(bytes int64) string {
-	switch {
-	case bytes >= PB:
-		return fmt.Sprintf("%.2fPi", float64(bytes)/float64(PB))
-	case bytes >= TB:
-		return fmt.Sprintf("%.2fTi", float64(bytes)/float64(TB))
-	case bytes >= GB:
-		return fmt.Sprintf("%.2fGi", float64(bytes)/float64(GB))
-	case bytes >= MB:
-		return fmt.Sprintf("%.2fMi", float64(bytes)/float64(MB))
-	case bytes >= KB:
-		return fmt.Sprintf("%.2fKi", float64(bytes)/float64(KB))
-	default:
-		return fmt.Sprintf("%dB", bytes)
-	}
-}
 
 func FormatBytesShort(bytes int64) string {
 	switch {
@@ -48,19 +27,6 @@ func FormatBytesShort(bytes int64) string {
 	default:
 		return fmt.Sprintf("%dB", bytes)
 	}
-}
-
-func ParseQuantity(s string) (int64, error) {
-	q, err := resource.ParseQuantity(s)
-	if err != nil {
-		return 0, err
-	}
-
-	return q.Value(), nil
-}
-
-func FormatQuantity(q resource.Quantity) string {
-	return q.String()
 }
 
 // FormatCPU converts millicores: values >= 1000m display as cores
@@ -80,53 +46,4 @@ func FormatCPU(millicores int64) string {
 
 func FormatMemory(bytes int64) string {
 	return FormatBytesShort(bytes)
-}
-
-// ParseCPU parses a CPU string like "100m" or "2" to millicores.
-func ParseCPU(s string) (int64, error) {
-	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "m") {
-		val, err := strconv.ParseInt(strings.TrimSuffix(s, "m"), 10, 64)
-		if err != nil {
-			return 0, err
-		}
-
-		return val, nil
-	}
-
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, err
-	}
-
-	return int64(val * 1000), nil
-}
-
-// ParseMemory parses a memory string like "128Mi" or "1Gi" to bytes.
-func ParseMemory(s string) (int64, error) {
-	q, err := resource.ParseQuantity(s)
-	if err != nil {
-		return 0, err
-	}
-
-	return q.Value(), nil
-}
-
-func FormatPercentage(value float64) string {
-	return fmt.Sprintf("%.1f%%", value*100)
-}
-
-func CalculatePercentage(used, total int64) float64 {
-	if total == 0 {
-		return 0
-	}
-
-	return float64(used) / float64(total)
-}
-
-// FormatResourceUsage formats resource usage as "used/total (percentage)".
-func FormatResourceUsage(used, total int64, formatter func(int64) string) string {
-	percentage := CalculatePercentage(used, total) * 100
-
-	return fmt.Sprintf("%s/%s (%.1f%%)", formatter(used), formatter(total), percentage)
 }

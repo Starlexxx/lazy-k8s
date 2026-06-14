@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -77,7 +76,7 @@ func (p *NodesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *NodesPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -86,27 +85,16 @@ func (p *NodesPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
+	extraHeader := 0
 
 	if p.width > 80 {
 		b.WriteString(p.renderNodeHeader())
 		b.WriteString("\n")
 
-		visibleHeight--
+		extraHeader = 1
 	}
 
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), extraHeader)
 
 	for i := startIdx; i < endIdx; i++ {
 		node := p.filtered[i]
@@ -152,10 +140,7 @@ func (p *NodesPanel) nodeNameWidth(hasMetrics bool) int {
 		reserved += 13
 	}
 
-	nameW := p.width - reserved
-	if nameW < 10 {
-		nameW = 10
-	}
+	nameW := max(p.width-reserved, 10)
 
 	return nameW
 }
@@ -391,35 +376,23 @@ func (p *NodesPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *NodesPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *NodesPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *NodesPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(n corev1.Node) string {
+		return n.Name
+	})
 }
 
 func (p *NodesPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	node := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(node)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *NodesPanel) GetSelectedDescribe() (string, error) {
@@ -478,25 +451,12 @@ func (p *NodesPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *NodesPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.nodes
-
-		return
-	}
-
-	p.filtered = make([]corev1.Node, 0)
-	for _, node := range p.nodes {
-		if strings.Contains(strings.ToLower(node.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, node)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.nodes,
+		p.filter,
+		func(n corev1.Node) string { return n.Name },
+		&p.cursor,
+	)
 }
 
 func (p *NodesPanel) SetFilter(query string) {
@@ -505,37 +465,25 @@ func (p *NodesPanel) SetFilter(query string) {
 }
 
 func (p *NodesPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, node := range p.nodes {
-		if strings.Contains(strings.ToLower(node.Name), q) {
-			results = append(results, SearchResult{
-				Name:   node.Name,
-				Kind:   p.title,
-				Status: k8s.GetNodeStatus(&node),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.nodes,
+		query,
+		p.title,
+		func(n corev1.Node) string { return n.Name },
+		nil,
+		func(n corev1.Node) string { return k8s.GetNodeStatus(&n) },
+	)
 }
 
 func (p *NodesPanel) NavigateTo(name, _ string) bool {
-	for i, node := range p.filtered {
-		if node.Name == name {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(n corev1.Node) string { return n.Name },
+		nil,
+		name,
+		"",
+	)
 }
 
 type nodesLoadedMsg struct {

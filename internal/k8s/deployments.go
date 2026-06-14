@@ -15,23 +15,11 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-type DeploymentInfo struct {
-	Name      string
-	Namespace string
-	Ready     string
-	UpToDate  int32
-	Available int32
-	Age       string
-	Images    []string
-}
-
 func (c *Client) ListDeployments(
 	ctx context.Context,
 	namespace string,
 ) ([]appsv1.Deployment, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -54,25 +42,19 @@ func (c *Client) GetDeployment(
 	ctx context.Context,
 	namespace, name string,
 ) (*appsv1.Deployment, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (c *Client) WatchDeployments(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().Deployments(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteDeployment(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().Deployments(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
@@ -82,9 +64,7 @@ func (c *Client) ScaleDeployment(
 	namespace, name string,
 	replicas int32,
 ) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	scale, err := c.clientset.AppsV1().
 		Deployments(namespace).
@@ -102,24 +82,23 @@ func (c *Client) ScaleDeployment(
 }
 
 func (c *Client) RestartDeployment(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
-
-	// Kubernetes has no native restart API; a timestamp annotation forces the
-	// deployment controller to perform a rolling update (matches kubectl rollout restart).
-	patch := []byte(
-		fmt.Sprintf(
-			`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`,
-			metav1.Now().Format("2006-01-02T15:04:05Z"),
-		),
-	)
+	namespace = c.ns(namespace)
 
 	_, err := c.clientset.AppsV1().
 		Deployments(namespace).
-		Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+		Patch(ctx, name, types.StrategicMergePatchType, restartPatch(), metav1.PatchOptions{})
 
 	return err
+}
+
+const restartPatchFmt = `{"spec":{"template":{"metadata":{"annotations":` +
+	`{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`
+
+// restartPatch builds the annotation patch used to force a rolling restart.
+// Kubernetes has no native restart API; a timestamp annotation makes the
+// controller perform a rolling update (matches kubectl rollout restart).
+func restartPatch() []byte {
+	return fmt.Appendf(nil, restartPatchFmt, metav1.Now().Format("2006-01-02T15:04:05Z"))
 }
 
 func (c *Client) UpdateDeployment(
@@ -183,9 +162,7 @@ func (c *Client) getOwnedReplicaSets(
 }
 
 func (c *Client) RollbackDeployment(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	ownedRS, err := c.getOwnedReplicaSets(ctx, namespace, name)
 	if err != nil {
@@ -218,9 +195,7 @@ func (c *Client) ListDeploymentRevisions(
 	ctx context.Context,
 	namespace, name string,
 ) ([]RevisionInfo, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	ownedRS, err := c.getOwnedReplicaSets(ctx, namespace, name)
 	if err != nil {
@@ -286,8 +261,20 @@ func getRevision(rs *appsv1.ReplicaSet) int64 {
 	return rev
 }
 
+// GetDeploymentDesiredReplicas returns spec.replicas, defaulting to 1 when
+// unset (the API server default).
+func GetDeploymentDesiredReplicas(deployment *appsv1.Deployment) int32 {
+	if deployment.Spec.Replicas == nil {
+		return 1
+	}
+
+	return *deployment.Spec.Replicas
+}
+
 func GetDeploymentReadyCount(deployment *appsv1.Deployment) string {
-	return fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, *deployment.Spec.Replicas)
+	desired := GetDeploymentDesiredReplicas(deployment)
+
+	return fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, desired)
 }
 
 // GetDeploymentPodSelector renders the deployment's pod label selector as a

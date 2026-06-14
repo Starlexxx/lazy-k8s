@@ -104,10 +104,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 				y.offset--
 			}
 		case "down", "j":
-			maxOffset := len(y.lines) - y.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(y.lines)-y.height+6, 0)
 
 			if y.offset < maxOffset {
 				y.offset++
@@ -115,10 +112,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 		case "g":
 			y.offset = 0
 		case "G":
-			maxOffset := len(y.lines) - y.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(y.lines)-y.height+6, 0)
 
 			y.offset = maxOffset
 		case "pgup", "ctrl+u":
@@ -127,10 +121,7 @@ func (y *YamlViewer) Update(msg tea.Msg) (*YamlViewer, tea.Cmd) {
 				y.offset = 0
 			}
 		case "pgdown", "ctrl+d":
-			maxOffset := len(y.lines) - y.height + 6
-			if maxOffset < 0 {
-				maxOffset = 0
-			}
+			maxOffset := max(len(y.lines)-y.height+6, 0)
 
 			y.offset += y.height / 2
 			if y.offset > maxOffset {
@@ -205,10 +196,7 @@ func (y *YamlViewer) View(width, height int) string {
 		visibleHeight = 1
 	}
 
-	endIdx := y.offset + visibleHeight
-	if endIdx > len(y.lines) {
-		endIdx = len(y.lines)
-	}
+	endIdx := min(y.offset+visibleHeight, len(y.lines))
 
 	for i := y.offset; i < endIdx; i++ {
 		line := y.lines[i]
@@ -233,20 +221,13 @@ func (y *YamlViewer) View(width, height int) string {
 	if len(y.lines) > visibleHeight && width > 12 {
 		scrollPos := float64(y.offset) / float64(len(y.lines)-visibleHeight)
 		barWidth := width - 10
-		leftWidth := int(float64(barWidth) * scrollPos)
-
-		if leftWidth < 0 {
-			leftWidth = 0
-		}
+		leftWidth := max(int(float64(barWidth)*scrollPos), 0)
 
 		if leftWidth > barWidth {
 			leftWidth = barWidth
 		}
 
-		rightWidth := barWidth - leftWidth - 1
-		if rightWidth < 0 {
-			rightWidth = 0
-		}
+		rightWidth := max(barWidth-leftWidth-1, 0)
 
 		indicator := strings.Repeat("─", leftWidth) + "█" + strings.Repeat("─", rightWidth)
 

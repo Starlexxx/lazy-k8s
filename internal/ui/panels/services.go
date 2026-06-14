@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -70,7 +69,7 @@ func (p *ServicesPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *ServicesPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -79,20 +78,7 @@ func (p *ServicesPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		svc := p.filtered[i]
@@ -125,10 +111,7 @@ func (p *ServicesPanel) renderServiceLine(svc corev1.Service, selected bool) str
 			reserved += 18
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(svc.Name, nameW), nameW,
@@ -286,35 +269,23 @@ func (p *ServicesPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *ServicesPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *ServicesPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *ServicesPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(svc corev1.Service) string {
+		return svc.Name
+	})
 }
 
 func (p *ServicesPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	svc := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(svc)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
@@ -372,25 +343,12 @@ func (p *ServicesPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *ServicesPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.services
-
-		return
-	}
-
-	p.filtered = make([]corev1.Service, 0)
-	for _, svc := range p.services {
-		if strings.Contains(strings.ToLower(svc.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, svc)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.services,
+		p.filter,
+		func(svc corev1.Service) string { return svc.Name },
+		&p.cursor,
+	)
 }
 
 func (p *ServicesPanel) SetFilter(query string) {
@@ -399,38 +357,25 @@ func (p *ServicesPanel) SetFilter(query string) {
 }
 
 func (p *ServicesPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, svc := range p.services {
-		if strings.Contains(strings.ToLower(svc.Name), q) {
-			results = append(results, SearchResult{
-				Name:      svc.Name,
-				Namespace: svc.Namespace,
-				Kind:      p.title,
-				Status:    string(svc.Spec.Type),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.services,
+		query,
+		p.title,
+		func(svc corev1.Service) string { return svc.Name },
+		func(svc corev1.Service) string { return svc.Namespace },
+		func(svc corev1.Service) string { return string(svc.Spec.Type) },
+	)
 }
 
 func (p *ServicesPanel) NavigateTo(name, namespace string) bool {
-	for i, svc := range p.filtered {
-		if svc.Name == name && svc.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(svc corev1.Service) string { return svc.Name },
+		func(svc corev1.Service) string { return svc.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type servicesLoadedMsg struct {

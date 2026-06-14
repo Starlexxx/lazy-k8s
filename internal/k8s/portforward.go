@@ -29,9 +29,7 @@ type PortForwarder struct {
 }
 
 func (c *Client) NewPortForwarder(opts PortForwardOptions) (*PortForwarder, error) {
-	if opts.Namespace == "" {
-		opts.Namespace = c.namespace
-	}
+	opts.Namespace = c.ns(opts.Namespace)
 
 	return &PortForwarder{
 		client:  c,

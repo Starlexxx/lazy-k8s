@@ -14,9 +14,7 @@ func (c *Client) ListDaemonSets(
 	ctx context.Context,
 	namespace string,
 ) ([]appsv1.DaemonSet, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -39,43 +37,29 @@ func (c *Client) GetDaemonSet(
 	ctx context.Context,
 	namespace, name string,
 ) (*appsv1.DaemonSet, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
 func (c *Client) WatchDaemonSets(ctx context.Context, namespace string) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().DaemonSets(namespace).Watch(ctx, metav1.ListOptions{})
 }
 
 func (c *Client) DeleteDaemonSet(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.AppsV1().DaemonSets(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
 func (c *Client) RestartDaemonSet(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
-
-	// Kubernetes has no native restart API; a timestamp annotation forces the
-	// controller to perform a rolling update (matches kubectl rollout restart).
-	restartedAt := metav1.Now().Format("2006-01-02T15:04:05Z")
-	patchFmt := `{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`
-	patch := fmt.Appendf(nil, patchFmt, restartedAt)
+	namespace = c.ns(namespace)
 
 	_, err := c.clientset.AppsV1().
 		DaemonSets(namespace).
-		Patch(ctx, name, types.StrategicMergePatchType, patch, metav1.PatchOptions{})
+		Patch(ctx, name, types.StrategicMergePatchType, restartPatch(), metav1.PatchOptions{})
 
 	return err
 }

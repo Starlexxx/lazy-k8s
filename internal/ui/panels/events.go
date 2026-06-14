@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -86,7 +85,7 @@ func (p *EventsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *EventsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -95,20 +94,7 @@ func (p *EventsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		event := p.filtered[i]
@@ -146,10 +132,7 @@ func (p *EventsPanel) renderEventLine(event corev1.Event, selected bool) string 
 			reserved += 16
 		}
 
-		reasonW := p.width - reserved
-		if reasonW < 10 {
-			reasonW = 10
-		}
+		reasonW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(event.Reason, reasonW), reasonW,
@@ -303,35 +286,21 @@ func (p *EventsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *EventsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *EventsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *EventsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(e corev1.Event) string { return e.Name })
 }
 
 func (p *EventsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	event := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(event)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *EventsPanel) GetSelectedDescribe() (string, error) {
@@ -391,10 +360,7 @@ func (p *EventsPanel) applyFilter() {
 	}
 
 	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
+		p.cursor = max(len(p.filtered)-1, 0)
 	}
 }
 
@@ -430,15 +396,14 @@ func (p *EventsPanel) SearchItems(query string) []SearchResult {
 }
 
 func (p *EventsPanel) NavigateTo(name, namespace string) bool {
-	for i, event := range p.filtered {
-		if event.Name == name && event.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(e corev1.Event) string { return e.Name },
+		func(e corev1.Event) string { return e.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type eventsLoadedMsg struct {

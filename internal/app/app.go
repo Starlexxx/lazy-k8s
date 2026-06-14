@@ -44,11 +44,3 @@ func (a *App) Run() error {
 
 	return err
 }
-
-func (a *App) Client() *k8s.Client {
-	return a.k8sClient
-}
-
-func (a *App) Config() *config.Config {
-	return a.config
-}

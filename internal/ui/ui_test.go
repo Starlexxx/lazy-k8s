@@ -286,20 +286,12 @@ func TestSwitchViewScrolling(t *testing.T) {
 
 			if tt.itemCount > tt.maxVisible {
 				halfVisible := tt.maxVisible / 2
-				startIdx = tt.selectedIdx - halfVisible
-
-				if startIdx < 0 {
-					startIdx = 0
-				}
+				startIdx = max(tt.selectedIdx-halfVisible, 0)
 
 				endIdx = startIdx + tt.maxVisible
 				if endIdx > tt.itemCount {
 					endIdx = tt.itemCount
-					startIdx = endIdx - tt.maxVisible
-
-					if startIdx < 0 {
-						startIdx = 0
-					}
+					startIdx = max(endIdx-tt.maxVisible, 0)
 				}
 			}
 
@@ -1469,7 +1461,7 @@ func TestRenderGlobalSearchScrollbar(t *testing.T) {
 	// Create enough results to require scrolling
 	var results []panels.SearchResult
 
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		results = append(results, panels.SearchResult{
 			Name:      "pod-" + strings.Repeat("x", i),
 			Namespace: "default",

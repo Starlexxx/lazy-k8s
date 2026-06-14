@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -71,7 +70,7 @@ func (p *IngressPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *IngressPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -80,20 +79,7 @@ func (p *IngressPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		ing := p.filtered[i]
@@ -126,10 +112,7 @@ func (p *IngressPanel) renderIngressLine(ing networkingv1.Ingress, selected bool
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(ing.Name, nameW), nameW,
@@ -334,35 +317,21 @@ func (p *IngressPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *IngressPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *IngressPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *IngressPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(i networkingv1.Ingress) string { return i.Name })
 }
 
 func (p *IngressPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	ing := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(ing)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *IngressPanel) GetSelectedDescribe() (string, error) {
@@ -412,25 +381,9 @@ func (p *IngressPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *IngressPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.ingresses
-
-		return
-	}
-
-	p.filtered = make([]networkingv1.Ingress, 0)
-	for _, ing := range p.ingresses {
-		if strings.Contains(strings.ToLower(ing.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, ing)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.ingresses, p.filter, func(i networkingv1.Ingress) string { return i.Name }, &p.cursor,
+	)
 }
 
 func (p *IngressPanel) SetFilter(query string) {
@@ -439,44 +392,32 @@ func (p *IngressPanel) SetFilter(query string) {
 }
 
 func (p *IngressPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, ing := range p.ingresses {
-		if strings.Contains(strings.ToLower(ing.Name), q) {
-			// Use first host as status summary
-			status := ""
-			if len(ing.Spec.Rules) > 0 {
-				status = ing.Spec.Rules[0].Host
+	return searchByName(
+		p.ingresses,
+		query,
+		p.title,
+		func(i networkingv1.Ingress) string { return i.Name },
+		func(i networkingv1.Ingress) string { return i.Namespace },
+		func(i networkingv1.Ingress) string {
+			// Use first host as status summary.
+			if len(i.Spec.Rules) > 0 {
+				return i.Spec.Rules[0].Host
 			}
 
-			results = append(results, SearchResult{
-				Name:      ing.Name,
-				Namespace: ing.Namespace,
-				Kind:      p.title,
-				Status:    status,
-			})
-		}
-	}
-
-	return results
+			return ""
+		},
+	)
 }
 
 func (p *IngressPanel) NavigateTo(name, namespace string) bool {
-	for i, ing := range p.filtered {
-		if ing.Name == name && ing.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(i networkingv1.Ingress) string { return i.Name },
+		func(i networkingv1.Ingress) string { return i.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type ingressLoadedMsg struct {

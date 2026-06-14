@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewHPAPanel(client *k8s.Client, styles *theme.Styles) *HPAPanel {
 	return &HPAPanel{
 		BasePanel: BasePanel{
 			title:       "HPAs",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -103,7 +102,7 @@ func (p *HPAPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *HPAPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -112,20 +111,7 @@ func (p *HPAPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		hpa := p.filtered[i]
@@ -158,10 +144,7 @@ func (p *HPAPanel) renderHPALine(hpa autoscalingv2.HorizontalPodAutoscaler, sele
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(hpa.Name, nameW), nameW,
@@ -334,35 +317,25 @@ func (p *HPAPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *HPAPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *HPAPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *HPAPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(
+		p.filtered,
+		p.cursor,
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Name },
+	)
 }
 
 func (p *HPAPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	hpa := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(hpa)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *HPAPanel) GetSelectedDescribe() (string, error) {
@@ -427,25 +400,12 @@ func (p *HPAPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *HPAPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.hpas
-
-		return
-	}
-
-	p.filtered = make([]autoscalingv2.HorizontalPodAutoscaler, 0)
-	for _, hpa := range p.hpas {
-		if strings.Contains(strings.ToLower(hpa.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, hpa)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.hpas,
+		p.filter,
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Name },
+		&p.cursor,
+	)
 }
 
 func (p *HPAPanel) SetFilter(query string) {
@@ -454,38 +414,25 @@ func (p *HPAPanel) SetFilter(query string) {
 }
 
 func (p *HPAPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, hpa := range p.hpas {
-		if strings.Contains(strings.ToLower(hpa.Name), q) {
-			results = append(results, SearchResult{
-				Name:      hpa.Name,
-				Namespace: hpa.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetHPAReplicaCount(&hpa),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.hpas,
+		query,
+		p.title,
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Name },
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Namespace },
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return k8s.GetHPAReplicaCount(&h) },
+	)
 }
 
 func (p *HPAPanel) NavigateTo(name, namespace string) bool {
-	for i, hpa := range p.filtered {
-		if hpa.Name == name && hpa.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Name },
+		func(h autoscalingv2.HorizontalPodAutoscaler) string { return h.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type hpaLoadedMsg struct {

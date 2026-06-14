@@ -88,9 +88,9 @@ func computeDiff(oldText, newText string) []DiffLine {
 	var result []DiffLine
 
 	for _, d := range diffs {
-		lines := strings.Split(strings.TrimRight(d.Text, "\n"), "\n")
+		lines := strings.SplitSeq(strings.TrimRight(d.Text, "\n"), "\n")
 
-		for _, line := range lines {
+		for line := range lines {
 			switch d.Type {
 			case diffmatchpatch.DiffEqual:
 				result = append(result, DiffLine{
@@ -285,10 +285,7 @@ func (d *DiffViewer) View(width, height int) string {
 
 	visibleHeight := d.visibleHeight()
 
-	endIdx := d.offset + visibleHeight
-	if endIdx > len(d.lines) {
-		endIdx = len(d.lines)
-	}
+	endIdx := min(d.offset+visibleHeight, len(d.lines))
 
 	maxLineWidth := width - 8
 
@@ -357,19 +354,13 @@ func (d *DiffViewer) renderScrollbar(b *strings.Builder, visibleHeight, width in
 	scrollPos := float64(d.offset) / float64(len(d.lines)-visibleHeight)
 	barWidth := width - 10
 
-	leftWidth := int(float64(barWidth) * scrollPos)
-	if leftWidth < 0 {
-		leftWidth = 0
-	}
+	leftWidth := max(int(float64(barWidth)*scrollPos), 0)
 
 	if leftWidth > barWidth {
 		leftWidth = barWidth
 	}
 
-	rightWidth := barWidth - leftWidth - 1
-	if rightWidth < 0 {
-		rightWidth = 0
-	}
+	rightWidth := max(barWidth-leftWidth-1, 0)
 
 	indicator := strings.Repeat("─", leftWidth) + "█" + strings.Repeat("─", rightWidth)
 

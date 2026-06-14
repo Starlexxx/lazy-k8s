@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,9 +14,7 @@ func (c *Client) ListNetworkPolicies(
 	ctx context.Context,
 	namespace string,
 ) ([]networkingv1.NetworkPolicy, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	list, err := c.clientset.NetworkingV1().
 		NetworkPolicies(namespace).
@@ -44,9 +43,7 @@ func (c *Client) GetNetworkPolicy(
 	ctx context.Context,
 	namespace, name string,
 ) (*networkingv1.NetworkPolicy, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.NetworkingV1().
 		NetworkPolicies(namespace).
@@ -57,9 +54,7 @@ func (c *Client) WatchNetworkPolicies(
 	ctx context.Context,
 	namespace string,
 ) (watch.Interface, error) {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.NetworkingV1().
 		NetworkPolicies(namespace).
@@ -67,9 +62,7 @@ func (c *Client) WatchNetworkPolicies(
 }
 
 func (c *Client) DeleteNetworkPolicy(ctx context.Context, namespace, name string) error {
-	if namespace == "" {
-		namespace = c.namespace
-	}
+	namespace = c.ns(namespace)
 
 	return c.clientset.NetworkingV1().
 		NetworkPolicies(namespace).
@@ -99,17 +92,17 @@ func GetNetworkPolicyPolicyTypes(np *networkingv1.NetworkPolicy) string {
 		return "Ingress"
 	}
 
-	var types string
+	var types strings.Builder
 
 	for i, pt := range np.Spec.PolicyTypes {
 		if i > 0 {
-			types += ", "
+			types.WriteString(", ")
 		}
 
-		types += string(pt)
+		types.WriteString(string(pt))
 	}
 
-	return types
+	return types.String()
 }
 
 func GetNetworkPolicyRuleSummary(np *networkingv1.NetworkPolicy) string {

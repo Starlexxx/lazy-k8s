@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -117,7 +116,7 @@ func (p *PodsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *PodsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -126,27 +125,16 @@ func (p *PodsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
+	extraHeader := 0
 
 	if p.width > 80 {
 		b.WriteString(p.renderPodHeader())
 		b.WriteString("\n")
 
-		visibleHeight--
+		extraHeader = 1
 	}
 
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), extraHeader)
 
 	for i := startIdx; i < endIdx; i++ {
 		pod := p.filtered[i]
@@ -199,10 +187,7 @@ func (p *PodsPanel) podNameWidth(hasMetrics bool) int {
 		reserved += 16
 	}
 
-	nameW := p.width - reserved
-	if nameW < 10 {
-		nameW = 10
-	}
+	nameW := max(p.width-reserved, 10)
 
 	return nameW
 }
@@ -468,43 +453,27 @@ func (p *PodsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *PodsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *PodsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *PodsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(pod corev1.Pod) string {
+		return pod.Name
+	})
 }
 
 func (p *PodsPanel) SelectedPod() *corev1.Pod {
-	if p.cursor >= len(p.filtered) {
-		return nil
-	}
-
-	return &p.filtered[p.cursor]
+	return selectedItem(p.filtered, p.cursor)
 }
 
 func (p *PodsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	pod := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(pod)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *PodsPanel) GetSelectedDescribe() (string, error) {
@@ -576,25 +545,12 @@ func (p *PodsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *PodsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.pods
-
-		return
-	}
-
-	p.filtered = make([]corev1.Pod, 0)
-	for _, pod := range p.pods {
-		if strings.Contains(strings.ToLower(pod.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, pod)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.pods,
+		p.filter,
+		func(pod corev1.Pod) string { return pod.Name },
+		&p.cursor,
+	)
 }
 
 func (p *PodsPanel) SetFilter(query string) {
@@ -608,38 +564,25 @@ func (p *PodsPanel) SetTestPods(pods []corev1.Pod) {
 }
 
 func (p *PodsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, pod := range p.pods {
-		if strings.Contains(strings.ToLower(pod.Name), q) {
-			results = append(results, SearchResult{
-				Name:      pod.Name,
-				Namespace: pod.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetPodStatus(&pod),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.pods,
+		query,
+		p.title,
+		func(pod corev1.Pod) string { return pod.Name },
+		func(pod corev1.Pod) string { return pod.Namespace },
+		func(pod corev1.Pod) string { return k8s.GetPodStatus(&pod) },
+	)
 }
 
 func (p *PodsPanel) NavigateTo(name, namespace string) bool {
-	for i, pod := range p.filtered {
-		if pod.Name == name && pod.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(pod corev1.Pod) string { return pod.Name },
+		func(pod corev1.Pod) string { return pod.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type podsLoadedMsg struct {

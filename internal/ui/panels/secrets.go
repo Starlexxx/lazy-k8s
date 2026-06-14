@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -70,7 +69,7 @@ func (p *SecretsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *SecretsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -79,20 +78,7 @@ func (p *SecretsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		secret := p.filtered[i]
@@ -125,10 +111,7 @@ func (p *SecretsPanel) renderSecretLine(secret corev1.Secret, selected bool) str
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(secret.Name, nameW), nameW,
@@ -247,35 +230,23 @@ func (p *SecretsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *SecretsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *SecretsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *SecretsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(s corev1.Secret) string {
+		return s.Name
+	})
 }
 
 func (p *SecretsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	secret := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(secret)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *SecretsPanel) GetSelectedDescribe() (string, error) {
@@ -313,25 +284,12 @@ func (p *SecretsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *SecretsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.secrets
-
-		return
-	}
-
-	p.filtered = make([]corev1.Secret, 0)
-	for _, secret := range p.secrets {
-		if strings.Contains(strings.ToLower(secret.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, secret)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.secrets,
+		p.filter,
+		func(s corev1.Secret) string { return s.Name },
+		&p.cursor,
+	)
 }
 
 func (p *SecretsPanel) SetFilter(query string) {
@@ -340,38 +298,25 @@ func (p *SecretsPanel) SetFilter(query string) {
 }
 
 func (p *SecretsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, secret := range p.secrets {
-		if strings.Contains(strings.ToLower(secret.Name), q) {
-			results = append(results, SearchResult{
-				Name:      secret.Name,
-				Namespace: secret.Namespace,
-				Kind:      p.title,
-				Status:    string(secret.Type),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.secrets,
+		query,
+		p.title,
+		func(s corev1.Secret) string { return s.Name },
+		func(s corev1.Secret) string { return s.Namespace },
+		func(s corev1.Secret) string { return string(s.Type) },
+	)
 }
 
 func (p *SecretsPanel) NavigateTo(name, namespace string) bool {
-	for i, secret := range p.filtered {
-		if secret.Name == name && secret.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(s corev1.Secret) string { return s.Name },
+		func(s corev1.Secret) string { return s.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type secretsLoadedMsg struct {

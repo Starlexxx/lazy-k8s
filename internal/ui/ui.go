@@ -764,9 +764,7 @@ func (m *Model) View() string {
 	case ViewDiff:
 		content = m.diffView.View(m.width, m.height)
 	case ViewConfirm:
-		content = m.renderNormalView()
-		confirmView := m.confirm.View()
-		content = m.overlayView(content, confirmView)
+		content = m.overlayView(m.confirm.View())
 	case ViewContextSwitch, ViewNamespaceSwitch, ViewContainerSelect:
 		content = m.renderSwitchView()
 	case ViewGlobalSearch:
@@ -774,9 +772,7 @@ func (m *Model) View() string {
 	case ViewHistory:
 		content = m.historyView.View(m.width, m.height)
 	case ViewInput:
-		content = m.renderNormalView()
-		inputView := m.input.View()
-		content = m.overlayView(content, inputView)
+		content = m.overlayView(m.input.View())
 	case ViewNormal:
 		content = m.renderNormalView()
 	}
@@ -934,20 +930,12 @@ func (m *Model) renderSwitchView() string {
 
 	if len(items) > maxVisible {
 		halfVisible := maxVisible / 2
-		startIdx = selectedIdx - halfVisible
-
-		if startIdx < 0 {
-			startIdx = 0
-		}
+		startIdx = max(selectedIdx-halfVisible, 0)
 
 		endIdx = startIdx + maxVisible
 		if endIdx > len(items) {
 			endIdx = len(items)
-			startIdx = endIdx - maxVisible
-
-			if startIdx < 0 {
-				startIdx = 0
-			}
+			startIdx = max(endIdx-maxVisible, 0)
 		}
 	}
 
@@ -981,17 +969,16 @@ func (m *Model) renderSwitchView() string {
 	b.WriteString(m.styles.Muted.Render("↑/↓ navigate • enter select • esc cancel"))
 
 	// Use wider modal to fit long names
-	modalWidth := m.width / 2
-	if modalWidth < 50 {
-		modalWidth = 50
-	}
+	modalWidth := max(m.width/2, 50)
 
 	content := m.styles.Modal.Width(modalWidth).Render(b.String())
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 }
 
-func (m *Model) overlayView(_, overlay string) string {
+// overlayView centers the overlay on a blank background; the underlying
+// content is intentionally not drawn behind it.
+func (m *Model) overlayView(overlay string) string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, overlay,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(m.styles.Background))
@@ -1078,7 +1065,7 @@ func (m *Model) startContextSwitch() (*Model, tea.Cmd) {
 }
 
 func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
-	nsList, err := m.k8sClient.ListNamespaces(m.k8sClient.Context())
+	nsList, err := m.k8sClient.ListNamespaces(context.Background())
 	if err != nil {
 		m.statusBar.SetError(fmt.Sprintf("Failed to list namespaces: %v", err))
 
@@ -1108,22 +1095,32 @@ func (m *Model) startNamespaceSwitch() (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+// handleListSelect implements the shared key handling for the filterable
+// selection lists (context switch, namespace switch, container select).
+// onSelect runs when an item is chosen and is responsible for setting the
+// resulting view mode.
+func (m *Model) handleListSelect(
+	msg tea.KeyMsg,
+	source []string,
+	onSelect func(item string) (*Model, tea.Cmd),
+) (*Model, tea.Cmd) {
 	if m.switchFilterActive {
 		switch msg.String() {
 		case "esc":
 			m.switchFilterActive = false
+			m.switchFilter = ""
+			m.applySwitchFilter(source)
 		case "enter":
 			m.switchFilterActive = false
 		case "backspace":
 			if len(m.switchFilter) > 0 {
 				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
-				m.applySwitchFilter(m.contextList)
+				m.applySwitchFilter(source)
 			}
 		default:
 			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
 				m.switchFilter += string(r)
-				m.applySwitchFilter(m.contextList)
+				m.applySwitchFilter(source)
 			}
 		}
 
@@ -1143,31 +1140,14 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.switchFilterActive = true
 	case "enter":
 		if m.selectIdx < len(m.switchFiltered) {
-			ctx := m.switchFiltered[m.selectIdx]
-
-			if err := m.k8sClient.SwitchContext(ctx); err != nil {
-				m.statusBar.SetError(fmt.Sprintf("Failed to switch context: %v", err))
-			} else {
-				m.header.SetContext(ctx)
-				m.header.SetNamespace(m.k8sClient.CurrentNamespace())
-				m.statusBar.SetMessage(fmt.Sprintf("Switched to context: %s", ctx))
-
-				var cmds []tea.Cmd
-				for _, panel := range m.panels {
-					cmds = append(cmds, panel.Refresh())
-				}
-
-				m.viewMode = ViewNormal
-
-				return m, tea.Batch(cmds...)
-			}
+			return onSelect(m.switchFiltered[m.selectIdx])
 		}
 
 		m.viewMode = ViewNormal
 	case "esc":
 		if m.switchFilter != "" {
 			m.switchFilter = ""
-			m.applySwitchFilter(m.contextList)
+			m.applySwitchFilter(source)
 		} else {
 			m.viewMode = ViewNormal
 		}
@@ -1176,69 +1156,33 @@ func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	if m.switchFilterActive {
-		switch msg.String() {
-		case "esc":
-			m.switchFilterActive = false
-			m.switchFilter = ""
-			m.applySwitchFilter(m.namespaceList)
-		case "enter":
-			m.switchFilterActive = false
-		case "backspace":
-			if len(m.switchFilter) > 0 {
-				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
-				m.applySwitchFilter(m.namespaceList)
-			}
-		default:
-			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
-				m.switchFilter += string(r)
-				m.applySwitchFilter(m.namespaceList)
-			}
-		}
-
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "up", "k":
-		if m.selectIdx > 0 {
-			m.selectIdx--
-		}
-	case "down", "j":
-		if m.selectIdx < len(m.switchFiltered)-1 {
-			m.selectIdx++
-		}
-	case "/":
-		m.switchFilterActive = true
-	case "enter":
-		if m.selectIdx < len(m.switchFiltered) {
-			ns := m.switchFiltered[m.selectIdx]
-			m.k8sClient.SetNamespace(ns)
-			m.header.SetNamespace(ns)
-			m.statusBar.SetMessage(fmt.Sprintf("Switched to namespace: %s", ns))
-
-			var cmds []tea.Cmd
-			for _, panel := range m.panels {
-				cmds = append(cmds, panel.Refresh())
-			}
-
-			m.viewMode = ViewNormal
-
-			return m, tea.Batch(cmds...)
-		}
-
+func (m *Model) handleContextSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	return m.handleListSelect(msg, m.contextList, func(ctx string) (*Model, tea.Cmd) {
 		m.viewMode = ViewNormal
-	case "esc":
-		if m.switchFilter != "" {
-			m.switchFilter = ""
-			m.applySwitchFilter(m.namespaceList)
-		} else {
-			m.viewMode = ViewNormal
-		}
-	}
 
-	return m, nil
+		if err := m.k8sClient.SwitchContext(ctx); err != nil {
+			m.statusBar.SetError(fmt.Sprintf("Failed to switch context: %v", err))
+
+			return m, nil
+		}
+
+		m.header.SetContext(ctx)
+		m.header.SetNamespace(m.k8sClient.CurrentNamespace())
+		m.statusBar.SetMessage(fmt.Sprintf("Switched to context: %s", ctx))
+
+		return m, m.refreshAllPanels()
+	})
+}
+
+func (m *Model) handleNamespaceSwitch(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	return m.handleListSelect(msg, m.namespaceList, func(ns string) (*Model, tea.Cmd) {
+		m.k8sClient.SetNamespace(ns)
+		m.header.SetNamespace(ns)
+		m.statusBar.SetMessage(fmt.Sprintf("Switched to namespace: %s", ns))
+		m.viewMode = ViewNormal
+
+		return m, m.refreshAllPanels()
+	})
 }
 
 // applySwitchFilter filters the source list by the current switchFilter
@@ -1783,59 +1727,11 @@ func (m *Model) refreshAllPanels() tea.Cmd {
 }
 
 func (m *Model) handleContainerSelect(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	if m.switchFilterActive {
-		switch msg.String() {
-		case "esc":
-			m.switchFilterActive = false
-			m.switchFilter = ""
-			m.applySwitchFilter(m.execContainers)
-		case "enter":
-			m.switchFilterActive = false
-		case "backspace":
-			if len(m.switchFilter) > 0 {
-				m.switchFilter = m.switchFilter[:len(m.switchFilter)-1]
-				m.applySwitchFilter(m.execContainers)
-			}
-		default:
-			if r := msg.Runes; len(r) == 1 && isValidFilterChar(r[0]) {
-				m.switchFilter += string(r)
-				m.applySwitchFilter(m.execContainers)
-			}
-		}
-
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "up", "k":
-		if m.selectIdx > 0 {
-			m.selectIdx--
-		}
-	case "down", "j":
-		if m.selectIdx < len(m.switchFiltered)-1 {
-			m.selectIdx++
-		}
-	case "/":
-		m.switchFilterActive = true
-	case "enter":
-		if m.selectIdx < len(m.switchFiltered) {
-			container := m.switchFiltered[m.selectIdx]
-			m.viewMode = ViewNormal
-
-			return m, m.execIntoPod(m.execNamespace, m.execPodName, container)
-		}
-
+	return m.handleListSelect(msg, m.execContainers, func(container string) (*Model, tea.Cmd) {
 		m.viewMode = ViewNormal
-	case "esc":
-		if m.switchFilter != "" {
-			m.switchFilter = ""
-			m.applySwitchFilter(m.execContainers)
-		} else {
-			m.viewMode = ViewNormal
-		}
-	}
 
-	return m, nil
+		return m, m.execIntoPod(m.execNamespace, m.execPodName, container)
+	})
 }
 
 func (m *Model) execIntoPod(namespace, podName, container string) tea.Cmd {
@@ -2471,19 +2367,9 @@ func (m *Model) renderGlobalSearchView() string {
 	// Modal border/padding consumes ~6 columns.
 	const modalPadding = 6
 
-	modalWidth := m.width * 3 / 4
-	if modalWidth > m.width-2 {
-		modalWidth = m.width - 2
-	}
+	modalWidth := max(min(m.width*3/4, m.width-2), 30)
 
-	if modalWidth < 30 {
-		modalWidth = 30
-	}
-
-	innerWidth := modalWidth - modalPadding
-	if innerWidth < 20 {
-		innerWidth = 20
-	}
+	innerWidth := max(modalWidth-modalPadding, 20)
 
 	var b strings.Builder
 
@@ -2504,10 +2390,7 @@ func (m *Model) renderGlobalSearchView() string {
 	))
 	b.WriteString("\n")
 
-	sepWidth := innerWidth
-	if sepWidth < 1 {
-		sepWidth = 1
-	}
+	sepWidth := max(innerWidth, 1)
 
 	b.WriteString(strings.Repeat("─", sepWidth))
 	b.WriteString("\n")
@@ -2516,11 +2399,7 @@ func (m *Model) renderGlobalSearchView() string {
 	modalHeight := m.height - 2
 	headerLines := 3 // title + input + separator
 	footerLines := 2 // scrollbar + border
-	visibleHeight := modalHeight - headerLines - footerLines
-
-	if visibleHeight < 3 {
-		visibleHeight = 3
-	}
+	visibleHeight := max(modalHeight-headerLines-footerLines, 3)
 
 	m.globalSearch.SetVisibleHeight(visibleHeight)
 	cursorIdx := m.globalSearch.Cursor()
@@ -2575,10 +2454,7 @@ func (m *Model) renderGlobalSearchView() string {
 	}
 
 	// Scroll the lines view
-	startLine := m.globalSearch.Offset()
-	if cursorLineIdx < startLine {
-		startLine = cursorLineIdx
-	}
+	startLine := min(cursorLineIdx, m.globalSearch.Offset())
 
 	if cursorLineIdx >= startLine+visibleHeight {
 		startLine = cursorLineIdx - visibleHeight + 1
@@ -2588,10 +2464,7 @@ func (m *Model) renderGlobalSearchView() string {
 		startLine = 0
 	}
 
-	endLine := startLine + visibleHeight
-	if endLine > len(lines) {
-		endLine = len(lines)
-	}
+	endLine := min(startLine+visibleHeight, len(lines))
 
 	// Column widths adapt to available space.
 	// Layout: "> name  namespace  status"
@@ -2604,10 +2477,7 @@ func (m *Model) renderGlobalSearchView() string {
 	}
 
 	// prefix(2) + name + gap(2) + ns + gap(2) + status
-	maxNameW := innerWidth - 2 - 2 - nsW - 2 - statusW
-	if maxNameW < 8 {
-		maxNameW = 8
-	}
+	maxNameW := max(innerWidth-2-2-nsW-2-statusW, 8)
 
 	for li := startLine; li < endLine; li++ {
 		line := lines[li]
@@ -2665,28 +2535,15 @@ func (m *Model) renderGlobalSearchView() string {
 
 	// Scrollbar
 	if len(lines) > visibleHeight {
-		barWidth := innerWidth - 4
-		if barWidth < 3 {
-			barWidth = 3
-		}
+		barWidth := max(innerWidth-4, 3)
 
 		scrollPos := float64(startLine) / float64(
 			len(lines)-visibleHeight,
 		)
 
-		leftWidth := int(float64(barWidth) * scrollPos)
-		if leftWidth < 0 {
-			leftWidth = 0
-		}
+		leftWidth := min(max(int(float64(barWidth)*scrollPos), 0), barWidth)
 
-		if leftWidth > barWidth {
-			leftWidth = barWidth
-		}
-
-		rightWidth := barWidth - leftWidth - 1
-		if rightWidth < 0 {
-			rightWidth = 0
-		}
+		rightWidth := max(barWidth-leftWidth-1, 0)
 
 		indicator := strings.Repeat("─", leftWidth) +
 			"█" + strings.Repeat("─", rightWidth)

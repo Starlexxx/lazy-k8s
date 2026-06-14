@@ -8,7 +8,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	appsv1 "k8s.io/api/apps/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/Starlexxx/lazy-k8s/internal/k8s"
 	"github.com/Starlexxx/lazy-k8s/internal/ui/theme"
@@ -27,7 +26,7 @@ func NewStatefulSetsPanel(client *k8s.Client, styles *theme.Styles) *StatefulSet
 	return &StatefulSetsPanel{
 		BasePanel: BasePanel{
 			title:       "StatefulSets",
-			shortcutKey: "0",
+			shortcutKey: "",
 		},
 		client: client,
 		styles: styles,
@@ -102,7 +101,7 @@ func (p *StatefulSetsPanel) Update(msg tea.Msg) (Panel, tea.Cmd) {
 func (p *StatefulSetsPanel) View() string {
 	var b strings.Builder
 
-	title := fmt.Sprintf("%s [%s]", p.title, p.shortcutKey)
+	title := p.renderTitle()
 	if p.focused {
 		b.WriteString(p.styles.PanelTitleActive.Render(title))
 	} else {
@@ -111,20 +110,7 @@ func (p *StatefulSetsPanel) View() string {
 
 	b.WriteString("\n")
 
-	visibleHeight := p.height - 3
-	if visibleHeight < 1 {
-		visibleHeight = 1
-	}
-
-	startIdx := 0
-	if p.cursor >= visibleHeight {
-		startIdx = p.cursor - visibleHeight + 1
-	}
-
-	endIdx := startIdx + visibleHeight
-	if endIdx > len(p.filtered) {
-		endIdx = len(p.filtered)
-	}
+	startIdx, endIdx := p.visibleWindow(len(p.filtered), 0)
 
 	for i := startIdx; i < endIdx; i++ {
 		sts := p.filtered[i]
@@ -168,10 +154,7 @@ func (p *StatefulSetsPanel) renderStatefulSetLine(sts appsv1.StatefulSet, select
 			reserved += 16
 		}
 
-		nameW := p.width - reserved
-		if nameW < 10 {
-			nameW = 10
-		}
+		nameW := max(p.width-reserved, 10)
 
 		line += utils.PadRight(
 			utils.Truncate(sts.Name, nameW), nameW,
@@ -312,35 +295,23 @@ func (p *StatefulSetsPanel) Delete() tea.Cmd {
 	}
 }
 
-func (p *StatefulSetsPanel) SelectedItem() interface{} {
-	if p.cursor >= len(p.filtered) {
+func (p *StatefulSetsPanel) SelectedItem() any {
+	item := selectedItem(p.filtered, p.cursor)
+	if item == nil {
 		return nil
 	}
 
-	return &p.filtered[p.cursor]
+	return item
 }
 
 func (p *StatefulSetsPanel) SelectedName() string {
-	if p.cursor >= len(p.filtered) {
-		return ""
-	}
-
-	return p.filtered[p.cursor].Name
+	return selectedName(p.filtered, p.cursor, func(sts appsv1.StatefulSet) string {
+		return sts.Name
+	})
 }
 
 func (p *StatefulSetsPanel) GetSelectedYAML() (string, error) {
-	if p.cursor >= len(p.filtered) {
-		return "", ErrNoSelection
-	}
-
-	sts := p.filtered[p.cursor]
-
-	data, err := yaml.Marshal(sts)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+	return marshalSelectedYAML(p.filtered, p.cursor)
 }
 
 func (p *StatefulSetsPanel) GetSelectedDescribe() (string, error) {
@@ -420,25 +391,12 @@ func (p *StatefulSetsPanel) GetSelectedDescribe() (string, error) {
 }
 
 func (p *StatefulSetsPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = p.statefulsets
-
-		return
-	}
-
-	p.filtered = make([]appsv1.StatefulSet, 0)
-	for _, sts := range p.statefulsets {
-		if strings.Contains(strings.ToLower(sts.Name), strings.ToLower(p.filter)) {
-			p.filtered = append(p.filtered, sts)
-		}
-	}
-
-	if p.cursor >= len(p.filtered) {
-		p.cursor = len(p.filtered) - 1
-		if p.cursor < 0 {
-			p.cursor = 0
-		}
-	}
+	p.filtered = filterByName(
+		p.statefulsets,
+		p.filter,
+		func(s appsv1.StatefulSet) string { return s.Name },
+		&p.cursor,
+	)
 }
 
 func (p *StatefulSetsPanel) SetFilter(query string) {
@@ -447,38 +405,25 @@ func (p *StatefulSetsPanel) SetFilter(query string) {
 }
 
 func (p *StatefulSetsPanel) SearchItems(query string) []SearchResult {
-	if query == "" {
-		return nil
-	}
-
-	q := strings.ToLower(query)
-
-	var results []SearchResult
-
-	for _, sts := range p.statefulsets {
-		if strings.Contains(strings.ToLower(sts.Name), q) {
-			results = append(results, SearchResult{
-				Name:      sts.Name,
-				Namespace: sts.Namespace,
-				Kind:      p.title,
-				Status:    k8s.GetStatefulSetReadyCount(&sts),
-			})
-		}
-	}
-
-	return results
+	return searchByName(
+		p.statefulsets,
+		query,
+		p.title,
+		func(sts appsv1.StatefulSet) string { return sts.Name },
+		func(sts appsv1.StatefulSet) string { return sts.Namespace },
+		func(sts appsv1.StatefulSet) string { return k8s.GetStatefulSetReadyCount(&sts) },
+	)
 }
 
 func (p *StatefulSetsPanel) NavigateTo(name, namespace string) bool {
-	for i, sts := range p.filtered {
-		if sts.Name == name && sts.Namespace == namespace {
-			p.cursor = i
-
-			return true
-		}
-	}
-
-	return false
+	return navigateTo(
+		p.filtered,
+		&p.cursor,
+		func(sts appsv1.StatefulSet) string { return sts.Name },
+		func(sts appsv1.StatefulSet) string { return sts.Namespace },
+		name,
+		namespace,
+	)
 }
 
 type statefulSetsLoadedMsg struct {
